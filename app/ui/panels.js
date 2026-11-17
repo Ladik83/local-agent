@@ -522,9 +522,24 @@
           (CTX_VALUES[j] === selectedCtx ? ' selected' : '') + '>' + esc(ctxLabel(CTX_VALUES[j])) + '</option>';
       }
       html += '</select></div>';
+      html += '<div class="tuneRow"><span>Своё значение</span><input type="number" id="panelsCtxManual" min="512" max="262144" step="512" value="' + context + '"></div>';
+      html += '<div class="tuneRow"><span></span><button class="ghost tiny" id="panelsCtxApply">Применить</button></div>';
       box.innerHTML = html;
       var tempSelect = byId('panelsTemp');
       var ctxSelect = byId('panelsCtx');
+      var manualCtx = byId('panelsCtxManual');
+      var applyCtx = byId('panelsCtxApply');
+      if (applyCtx && manualCtx) {
+        applyCtx.onclick = function () {
+          var value = Math.round(Number(manualCtx.value) || 0);
+          if (!value || value < 512 || value > 262144) {
+            toast('Контекст: от 512 до 262144 токенов');
+            return;
+          }
+          manualCtx.value = value;
+          saveSetting('context', value, 'Контекст ' + value + ' токенов');
+        };
+      }
       if (tempSelect) {
         tempSelect.onchange = function () {
           var value = Number(tempSelect.value);

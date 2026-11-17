@@ -103,13 +103,16 @@
  <div class="panel">
  <label class="row"><span>Папка моделей</span><input type="text" id="modelsDir" class="wide"></label>
  <label class="row"><span>Дополнительные папки (через ;)</span><input type="text" id="extraDirs" class="wide" placeholder="D:\Models"></label>
- <label class="row"><span>Контекст</span>
- <select id="context">
- <option value="4096">4 096</option>
- <option value="8192">8 192</option>
- <option value="16384">16 384</option>
- <option value="32768">32 768</option>
- </select>
+ <label class="row"><span>Контекст, токенов</span>
+ <input type="number" id="context" min="512" max="262144" step="512" class="wide" list="ctxPresets">
+ <datalist id="ctxPresets">
+ <option value="4096"></option>
+ <option value="8192"></option>
+ <option value="16384"></option>
+ <option value="32768"></option>
+ <option value="65536"></option>
+ <option value="131072"></option>
+ </datalist>
  </label>
  <button id="saveSettings" class="primary">Сохранить</button>
  </div>
