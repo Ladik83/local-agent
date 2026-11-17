@@ -154,6 +154,10 @@ class Handler(BaseHTTPRequestHandler):
         query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         return (query.get("token") or [""])[0] == ACCESS_TOKEN
 
+    def _host_ok(self) -> bool:
+        host = (self.headers.get("Host") or "").split(":")[0].strip().lower()
+        return host in ("", "127.0.0.1", "localhost", "[::1]")
+
     def _need_token(self) -> bool:
         route = urllib.parse.urlparse(self.path).path
         if not route.startswith("/api/"):
@@ -187,11 +191,17 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
         self.wfile.write(data)
 
     def do_GET(self):
         route = urllib.parse.urlparse(self.path).path
+        if not self._host_ok():
+            self.send_error(403, "bad host")
+            return
         if self._need_token():
             return
         try:
@@ -310,6 +320,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         route = urllib.parse.urlparse(self.path).path
+        if not self._host_ok():
+            self.send_error(403, "bad host")
+            return
         if self._need_token():
             return
         try:
@@ -358,7 +371,6 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({"ok": True, "projects": config.load().get("projects") or []})
             elif route == "/api/chat/cancel":
                 agent.STOP["flag"] = True
-                self._send({"ok": True})
                 self._send({"ok": True})
             elif route == "/api/approve":
                 ok = tools.resolve_approval(str(data.get("id") or ""), bool(data.get("allow")))
@@ -435,6 +447,10 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as exc:
                     self._send({"ok": False, "error": str(exc)})
             elif route == "/api/mcp/add":
+                if not tools.approval_gate("mcp", {"server": str(data.get("id") or "")}, config.load(), emit_console):
+                    self._send({"ok": False, "error": "Пользователь не разрешил запуск MCP-сервера"})
+                    return
+            elif route == "/api/mcp/add":
                 entry = {"id": str(data.get("id") or "").strip(),
                          "command": str(data.get("command") or "").strip(),
                          "args": [str(a) for a in (data.get("args") or [])], "enabled": True}
@@ -450,6 +466,10 @@ class Handler(BaseHTTPRequestHandler):
                 config.save({"mcp": servers})
                 mcp.stop_all()
                 self._send({"ok": True, "servers": servers})
+            elif route == "/api/mcp/test":
+                if not tools.approval_gate("mcp", {"server": str(data.get("id") or "")}, config.load(), emit_console):
+                    self._send({"ok": False, "error": "Пользователь не разрешил проверку MCP-сервера"})
+                    return
             elif route == "/api/mcp/test":
                 sid = str(data.get("id") or "")
                 servers = [s for s in (config.load().get("mcp") or []) if s.get("id") == sid]
@@ -495,13 +515,18 @@ class Handler(BaseHTTPRequestHandler):
             self._send({"error": str(exc)}, 500)
 
 
+def emit_console(event: dict) -> None:
+    print("approval:", event.get("tool"), flush=True)
+
+
 def _alive(port: int) -> bool:
     try:
-        with urllib.request.urlopen("http://" + HOST + ":%d/api/state" % port, timeout=2) as resp:
+        url = "http://" + HOST + ":" + str(port) + "/api/version"
+        request = urllib.request.Request(url, headers={"X-Agent-Token": ACCESS_TOKEN})
+        with urllib.request.urlopen(request, timeout=2) as resp:
             return resp.status == 200
     except Exception:
         return False
-
 
 class Server(ThreadingHTTPServer):
     allow_reuse_address = False
@@ -509,6 +534,11 @@ class Server(ThreadingHTTPServer):
 
 
 def run(port: int = 7867, open_browser: bool = True):
+    try:
+        if updater.has_pending():
+            updater.apply_pending()
+    except Exception:
+        pass
     url = "http://" + HOST + ":%d/" % port
     if _alive(port):
         print("Приложение уже запущено: " + url, flush=True)

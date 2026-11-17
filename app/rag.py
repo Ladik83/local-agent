@@ -158,7 +158,12 @@ def _collect(target: pathlib.Path) -> list[pathlib.Path]:
 
 def add_path(raw_path: str, emit=None) -> dict:
     """Индексируем файл или папку. Возвращает {ok, files, chunks, skipped}."""
-    target = pathlib.Path(os.path.expandvars(os.path.expanduser(str(raw_path or "").strip())))
+    try:
+        from . import config as _config, tools as _tools
+        target = _tools._resolve(str(raw_path or ""), _config.load())
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+    target = pathlib.Path(target)
     if not str(target):
         return {"ok": False, "error": "Путь не указан"}
     if not target.exists():

@@ -55,7 +55,7 @@ function setStatus() {
 }
 
 
-function esc(t) { return String(t).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function esc(t) { return String(t === null || t === undefined ? '' : t).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&#34;',"'":'&#39;'}[c]; }); }
 function badge(text, cls) { return '<span class="badge ' + (cls || '') + '">' + text + '</span>'; }
 function tip(text) {
   return '<span class="help" data-tip="' + esc(text) + '">?</span>';

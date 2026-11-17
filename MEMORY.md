@@ -93,3 +93,8 @@
 - app/panels.py: snapshot() с кэшем 1 с (второй вызов 0.025 с), секции изолированы try/except, добавлен disk_total_gb.
 - app/ui/panels.js: наполняет monRes, monModel, modelAdvice, modelTuning, monNow; вызовы Panels.renderAll из loadState и pollStats.
 - Проверено: блоки заполнены, аккордеон true->false->true, температура 0.8 ушла в настройки.
+
+**2026-11-18 — аудит и закрытие дыр**
+- Отчёты: docs/AUDIT_2026-11.md (383 стр), docs/SECURITY.md (352), docs/COMPETITORS.md (180), docs/INTEGRATIONS.md (869).
+- Исправлено: fetch_url только http/https (file:// закрыт), deny-list на токены и ключи в _resolve, rag.add_path через _resolve, run_command без shell=True, Host-проверка (403 на чужой Host), заголовки X-Frame-Options/nosniff, esc() экранирует кавычки, MCP запускается только [PERSON_NAME], apply_pending при старте, _alive с токеном, убран двойной _send.
+- Осталось: подпись zip-обновлений, keystore на DPAPI (сейчас PBKDF2), долгие [PERSON_NAME] синхронно, 40 глухих except.

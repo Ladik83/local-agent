@@ -66,6 +66,25 @@ def schemas(cfg: dict):
     return schemas_out
 
 
+_DENY_PARTS = ("access.token", "keys.json", "keys.salt", ".ssh", ".aws", ".gnupg",
+               "id_rsa", "id_ed25519", "secrets.v2.json", "login data", "cookies")
+
+
+def _is_denied(path: pathlib.Path) -> bool:
+    """Секреты и профили браузеров не отдаём даже внутри разрешённых папок."""
+    text = str(path).lower().replace("/", "\\")
+    if any(part in text for part in _DENY_PARTS):
+        return True
+    try:
+        from . import config
+        data_dir = str(config.DATA_DIR).lower().replace("/", "\\")
+        if text.startswith(data_dir) and not text.startswith(data_dir + "\\logs"):
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _roots(cfg: dict):
     out = [pathlib.Path.home()]
     for item in (cfg.get("projects") or []):
@@ -92,8 +111,10 @@ def _resolve(raw: str, cfg: dict) -> pathlib.Path:
         path = home / path
     path = path.resolve()
     text = str(path).lower()
+    if _is_denied(path):
+        raise ValueError("этот файл закрыт: токены, ключи и профили браузеров не читаются")
     roots = _roots(cfg)
-    if not any(text.startswith(str(root).lower()) for root in roots):
+    if not any(text.startswith(str(root).lower() + "\\") or text == str(root).lower() for root in roots):
         allowed = ", ".join(str(root) for root in roots[:4])
         raise ValueError("путь вне разрешённых папок. Разрешено: %s. Пиши полный путь Windows, например %s" % (allowed, home))
     return path
@@ -146,7 +167,7 @@ def _run_command(args, cfg):
     if not cmd.strip():
         return "Пустая команда"
     try:
-        done = subprocess.run(cmd, shell=True, capture_output=True, timeout=180,
+        done = subprocess.run(["cmd", "/c", cmd], capture_output=True, timeout=180,
                               cwd=str(pathlib.Path.home()), creationflags=NO_WINDOW)
     except subprocess.TimeoutExpired:
         return "Команда не завершилась за 180 секунд"
@@ -174,7 +195,7 @@ def _web_search(args, cfg):
             page = resp.read().decode("utf-8", "replace")
     except Exception as exc:
         return "Поиск недоступен: %s" % exc
-    snippets = [SNIPPET.finditer(page)]
+    snippets = list(SNIPPET.finditer(page))
     lines = []
     for index, match in enumerate(ARTICLE.finditer(page)):
         if index >= 5:
@@ -192,8 +213,32 @@ def _web_search(args, cfg):
     return "\n\n".join(lines) or "Ничего не найдено"
 
 
+def _host_blocked(host: str) -> bool:
+    host = (host or "").strip().lower()
+    if not host or host in ("localhost", "localhost.localdomain"):
+        return True
+    if host.endswith(".local") or host.endswith(".internal"):
+        return True
+    try:
+        import ipaddress
+        import socket
+        for info in socket.getaddrinfo(host, None):
+            addr = ipaddress.ip_address(info[4][0])
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                return True
+    except Exception:
+        return False
+    return False
+
+
 def _fetch_url(args, cfg):
-    req = urllib.request.Request(args.get("url", ""), headers=UA)
+    raw = str(args.get("url", "") or "").strip()
+    parsed = urllib.parse.urlparse(raw)
+    if parsed.scheme not in ("http", "https"):
+        return "Можно скачивать только http и https"
+    if _host_blocked(parsed.hostname or ""):
+        return "Локальная сеть и этот компьютер недоступны для скачивания"
+    req = urllib.request.Request(raw, headers=UA)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             body = resp.read(3 * 1024 * 1024).decode("utf-8", "replace")
