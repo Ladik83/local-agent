@@ -298,3 +298,10 @@ footer.statusbar { flex: 0 0 auto; z-index: 30; }
 .kbHit .sub { margin: 0 0 4px; }
 #kbList .row { border-bottom: 1px dashed var(--line); }
 #kbList .row:last-child { border-bottom: 0; }
+
+.templates { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 0 2px; }
+.chip {
+  background: var(--panel2); border: 1px solid var(--line); color: var(--muted);
+  border-radius: 99px; padding: 4px 11px; font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.chip:hover { color: var(--text); border-color: var(--accent); }

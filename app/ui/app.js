@@ -1055,6 +1055,22 @@ function render() {
   if (STATE.download && STATE.download.active) poll();
 }
 
+const TEMPLATES = {
+  audit: 'Проверь папку и скажи, что улучшить. Сначала посмотри файлы, потом выводы.',
+  review: 'Сделай ревью кода в папке: ошибки, риски, что упростить.',
+  kb: 'Найди в базе знаний: ',
+  spec: 'Собери короткое ТЗ: цель, шаги, результат.'
+};
+
+function useTemplate(name) {
+  const text = TEMPLATES[name];
+  if (!text) return;
+  const input = document.getElementById('input');
+  input.value = text;
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+}
+
 async function loadAutostart() {
   const box = document.getElementById('autostart');
   if (!box) return;
@@ -1162,6 +1178,9 @@ document.getElementById('kbQuery') && document.getElementById('kbQuery').addEven
 });
 document.getElementById('autostart') && document.getElementById('autostart').addEventListener('change', function (event) { toggleAutostart(event.target.checked); });
 loadAutostart();
+document.querySelectorAll('.chip').forEach(function (chip) {
+  chip.addEventListener('click', function () { useTemplate(chip.dataset.template); });
+});
 document.getElementById('micBtn').addEventListener('click', toggleMic);
 document.getElementById('stopBtn').addEventListener('click', cancelGeneration);
 window.addEventListener('keydown', function (event) {

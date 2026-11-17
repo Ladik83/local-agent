@@ -404,9 +404,17 @@ class Handler(BaseHTTPRequestHandler):
                 voice.say(str(data.get("text") or ""))
                 self._send({"ok": True})
             elif route == "/api/open":
-                target = str(data.get("path") or "")
+                raw = str(data.get("path") or "").strip()
                 try:
-                    os.startfile(target)
+                    target = tools._resolve(raw, config.load())
+                except ValueError as exc:
+                    self._send({"ok": False, "error": str(exc)})
+                    return
+                if not target.exists():
+                    self._send({"ok": False, "error": "[PERSON_NAME] не найден: %s" % target})
+                    return
+                try:
+                    os.startfile(str(target))
                     self._send({"ok": True})
                 except Exception as exc:
                     self._send({"ok": False, "error": str(exc)})

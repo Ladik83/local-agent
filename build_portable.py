@@ -49,7 +49,7 @@ def copy_code(target: pathlib.Path) -> None:
     if app_dir.exists():
         shutil.rmtree(app_dir)
     shutil.copy2(ROOT / "run.py", target / "run.py")
-    for name in ("README.md", "AUDIT.md"):
+    for name in ("README.md", "AUDIT.md", "MEMORY.md", "VERSION"):
         if (ROOT / name).exists():
             shutil.copy2(ROOT / name, target / name)
     shutil.copytree(ROOT / "app", target / "app", ignore=shutil.ignore_patterns(*SKIP))
