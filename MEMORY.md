@@ -76,3 +76,9 @@
 - Рекомендация модели двумя профилями: «Быстро» (до 5.5 ГБ) и «Качественно» (до 60% свободной памяти).
 - Статические файлы отдаются с Cache-Control: no-store — иначе браузер держит старый app.js.
 - Версия в статусной строке берётся из /api/version (VERSION = 0.6.0).
+
+**2026-11-17 — трей и автообновление**
+- app/tray.py: иконка, меню Открыть/Выход, свой поток, лог tray.log. Включается настройкой tray.
+- app/updater.py: check, download_and_apply, apply_pending, бэкап и откат, флаг pending_update.json.
+- Маршруты: GET /api/version, POST /api/update/check и /api/update/apply.
+- Проверено: трей icon_added=True, stop гасит поток; обновление 0.7.0 против 0.6.0 -> update: true.

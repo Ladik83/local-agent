@@ -1219,6 +1219,14 @@ function wireGear() {
   if (theme) theme.onchange = function () { localStorage.setItem('agentTheme', theme.value); applyLook(); };
   const font = document.getElementById('gearFont');
   if (font) font.onchange = function () { localStorage.setItem('agentFont', font.value); applyLook(); };
+  const trayBox = document.getElementById('gearTray');
+  if (trayBox) {
+    trayBox.checked = !!(STATE.settings && STATE.settings.tray);
+    trayBox.onchange = async function () {
+      await postJson('/api/settings', { tray: trayBox.checked });
+      toast('Готово. Изменение применится после перезапуска');
+    };
+  }
   const plus = document.getElementById('newChatBtn');
   if (plus) plus.onclick = function () { newChat(); };
   applyLook();

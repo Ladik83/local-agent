@@ -224,15 +224,6 @@ class Handler(BaseHTTPRequestHandler):
                             "port": self.server.server_port,
                             "data_dir": str(config.DATA_DIR),
                             "pending": updater.pending_info()})
-            elif route == "/api/update/check":
-                link = str(data.get("url") or config.load().get("update_url") or "")
-                if not link:
-                    self._send({"ok": False, "error": "Адрес обновлений не задан в настройках"})
-                    return
-                self._send(updater.check(link))
-            elif route == "/api/update/apply":
-                link = str(data.get("url") or config.load().get("update_url") or "")
-                self._send(updater.download_and_apply(link, str(data.get("zip") or "")))
             elif route == "/api/autostart":
                 self._send(autostart.status())
             elif route == "/api/rag":
@@ -370,6 +361,15 @@ class Handler(BaseHTTPRequestHandler):
             elif route == "/api/approve":
                 ok = tools.resolve_approval(str(data.get("id") or ""), bool(data.get("allow")))
                 self._send({"ok": ok})
+            elif route == "/api/update/check":
+                link = str(data.get("url") or config.load().get("update_url") or "")
+                if not link:
+                    self._send({"ok": False, "error": "Адрес обновлений не задан в настройках"})
+                    return
+                self._send(updater.check(link))
+            elif route == "/api/update/apply":
+                link = str(data.get("url") or config.load().get("update_url") or "")
+                self._send(updater.download_and_apply(link, str(data.get("zip") or "")))
             elif route == "/api/autostart":
                 want = bool(data.get("enabled"))
                 self._send(autostart.set_enabled(want))
@@ -521,6 +521,13 @@ def run(port: int = 7867, open_browser: bool = True):
     httpd.daemon_threads = True
     url = "http://" + HOST + ":%d/" % httpd.server_port
     print(url, flush=True)
+    icon = None
+    try:
+        if config.load().get("tray"):
+            from . import tray
+            icon = tray.start(url, on_exit=lambda: (engine.stop(), os._exit(0)))
+    except Exception:
+        icon = None
     if open_browser:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
     try:
@@ -528,6 +535,11 @@ def run(port: int = 7867, open_browser: bool = True):
     except KeyboardInterrupt:
         pass
     finally:
+        if icon is not None:
+            try:
+                icon.stop()
+            except Exception:
+                pass
         engine.stop()
 
 
