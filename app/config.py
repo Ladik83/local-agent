@@ -12,7 +12,7 @@ PORTABLE = PORTABLE_MARKER.exists()
 
 
 def _data_root() -> pathlib.Path:
-    """Портативный режим: данные рядом [PERSON_NAME], иначе в профиле Windows."""
+    """Данные рядом с программой в портативном режиме, иначе в профиле."""
     env = os.environ.get("LOCALAGENT_HOME")
     if env:
         return pathlib.Path(env)

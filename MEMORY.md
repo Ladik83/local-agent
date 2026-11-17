@@ -87,3 +87,9 @@
 - Одна прокрутка на колонку: у .drawer overflow hidden, у .drawerCol auto.
 - Ширина колонок тянется мышью: разделители .colResizer, ширины в localStorage agentDrawerWidths, минимум 200 px.
 - Инициализация UI разбита на bootStep(): сбой одного шага больше не блокирует loadState и pollStats.
+
+**2026-11-18 — секции нижней панели**
+- Третья колонка на details/summary: клик раскрывает и сворачивает, состояние в localStorage agentAccState.
+- app/panels.py: snapshot() с кэшем 1 с (второй вызов 0.025 с), секции изолированы try/except, добавлен disk_total_gb.
+- app/ui/panels.js: наполняет monRes, monModel, modelAdvice, modelTuning, monNow; вызовы Panels.renderAll из loadState и pollStats.
+- Проверено: блоки заполнены, аккордеон true->false->true, температура 0.8 ушла в настройки.

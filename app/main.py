@@ -12,7 +12,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import agent, autostart, catalog, chats, config, drives, engine, hardware, keystore, mcp, orchestrator, providers, rag, roles, scan, stats, tools, updater, voice
+from . import agent, autostart, catalog, chats, config, drives, engine, hardware, keystore, mcp, orchestrator, panels, providers, rag, roles, scan, stats, tools, updater, voice
 
 UI_DIR = pathlib.Path(__file__).parent / "ui"
 TOKEN_FILE = config.DATA_DIR / "access.token"
@@ -219,6 +219,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(chats.load((query.get("id") or [""])[0]))
             elif route == "/api/job":
                 self._send({"engine": dict(engine.JOB), "download": dict(DL), "discover": dict(DISC)})
+            elif route == "/api/panels":
+                self._send(panels.snapshot())
             elif route == "/api/version":
                 self._send({"version": updater.current_version(),
                             "port": self.server.server_port,

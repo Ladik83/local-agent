@@ -132,18 +132,12 @@
   </div>
   <div class="colResizer"></div>
   <div class="drawerCol">
-   <h4>Компьютер</h4>
-   <div id="hwCard"></div>
-   <h4>Ресурсы</h4>
-   <div id="monRes"></div>
-   <h4>Модель</h4>
-   <div id="monModel"></div>
-   <h4>Рекомендация под этот ПК</h4>
-   <div id="modelAdvice"></div>
-   <h4>Настройки модели</h4>
-   <div id="modelTuning"></div>
-   <h4>Что происходит сейчас</h4>
-   <div id="monNow"></div>
+   <details class="acc" open><summary>Компьютер</summary><div id="hwCard"></div></details>
+   <details class="acc" open><summary>Ресурсы</summary><div id="monRes"></div></details>
+   <details class="acc" open><summary>Модель</summary><div id="monModel"></div></details>
+   <details class="acc"><summary>Рекомендация под этот ПК</summary><div id="modelAdvice"></div></details>
+   <details class="acc"><summary>Настройки модели</summary><div id="modelTuning"></div></details>
+   <details class="acc" open><summary>Что происходит сейчас</summary><div id="monNow"></div></details>
   </div>
  </div>
 </div>
@@ -209,6 +203,7 @@
  <div class="modal" id="approveBody"></div>
 </div>
 <div id="toast" class="toast"></div>
+<script src="/ui/panels.js"></script>
 <script src="/ui/app.js"></script>
 </body>
 </html>

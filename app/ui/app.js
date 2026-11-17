@@ -697,6 +697,9 @@ async function pollStats() {
     STATS = await resp.json();
     renderStats();
     renderStatusBar();
+    if (window.Panels && window.Panels.renderAll) {
+      try { window.Panels.renderAll(); } catch (error) { console.error('panels', error); }
+    }
   } catch (err) {
     return;
   }
@@ -1045,6 +1048,9 @@ function render() {
   renderHardware();
   renderAdvice();
   renderTuning();
+  if (window.Panels && window.Panels.renderAll) {
+    try { window.Panels.renderAll(); } catch (error) { console.error('panels', error); }
+  }
   renderLocalModels();
   renderCatalog();
   renderSettings();
@@ -1439,4 +1445,21 @@ setInterval(pollStats, 1500);
   } catch (error) {
     return;
   }
+})();
+
+// remember which sections are open
+(function () {
+  var KEY = 'agentAccState';
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (error) { saved = {}; }
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('details.acc'));
+  boxes.forEach(function (box, index) {
+    var title = box.querySelector('summary');
+    var name = title ? title.textContent.trim() : String(index);
+    if (Object.prototype.hasOwnProperty.call(saved, name)) box.open = !!saved[name];
+    box.addEventListener('toggle', function () {
+      saved[name] = box.open;
+      try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (error) { return; }
+    });
+  });
 })();
