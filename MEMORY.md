@@ -82,3 +82,8 @@
 - app/updater.py: check, download_and_apply, apply_pending, бэкап и откат, флаг pending_update.json.
 - Маршруты: GET /api/version, POST /api/update/check и /api/update/apply.
 - Проверено: трей icon_added=True, stop гасит поток; обновление 0.7.0 против 0.6.0 -> update: true.
+
+**2026-11-17 — колонки нижней панели**
+- Одна прокрутка на колонку: у .drawer overflow hidden, у .drawerCol auto.
+- Ширина колонок тянется мышью: разделители .colResizer, ширины в localStorage agentDrawerWidths, минимум 200 px.
+- Инициализация UI разбита на bootStep(): сбой одного шага больше не блокирует loadState и pollStats.

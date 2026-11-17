@@ -1198,6 +1198,44 @@ function applyLook() {
   if (fontSelect) fontSelect.value = font;
 }
 
+function wireResizers() {
+  const grid = document.querySelector('.drawerGrid');
+  if (!grid) return;
+  const cols = Array.from(grid.querySelectorAll('.drawerCol'));
+  let saved = [];
+  try {
+    saved = JSON.parse(localStorage.getItem('agentDrawerWidths') || '[]');
+  } catch (error) {
+    saved = [];
+  }
+  cols.forEach(function (col, index) {
+    if (saved[index] && Number(saved[index]) > 60) col.style.flex = '0 0 ' + saved[index] + 'px';
+  });
+  Array.from(grid.querySelectorAll('.colResizer')).forEach(function (bar, index) {
+    bar.addEventListener('mousedown', function (event) {
+      event.preventDefault();
+      const left = cols[index];
+      const right = cols[index + 1];
+      if (!left || !right) return;
+      const startX = event.clientX;
+      const leftWidth = left.getBoundingClientRect().width;
+      const rightWidth = right.getBoundingClientRect().width;
+      const move = function (moveEvent) {
+        const delta = moveEvent.clientX - startX;
+        left.style.flex = '0 0 ' + Math.max(160, leftWidth + delta) + 'px';
+        right.style.flex = '0 0 ' + Math.max(160, rightWidth - delta) + 'px';
+      };
+      const up = function () {
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        const widths = cols.map(function (col) { return Math.round(col.getBoundingClientRect().width); });
+        localStorage.setItem('agentDrawerWidths', JSON.stringify(widths));
+      };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
+  });
+}
 function wireGear() {
   const gear = document.getElementById('gearBtn');
   if (gear) gear.onclick = openGear;
@@ -1246,7 +1284,7 @@ async function loadAutostart() {
 
 async function toggleAutostart(enabled) {
   const res = await postJson('/api/autostart', { enabled: enabled });
-  if (res && res.ok) toast(enabled ? '[PERSON_NAME] входе: включено' : '[PERSON_NAME] входе: выключено');
+  if (res && res.ok) toast(enabled ? 'Автозапуск: включено' : 'Автозапуск: выключено');
   else toast('Не вышло: ' + ((res && res.detail) || 'нет ответа'));
 }
 
@@ -1381,8 +1419,12 @@ inputBox.addEventListener('input', function () {
   inputBox.style.height = Math.min(inputBox.scrollHeight, 200) + 'px';
 });
 
-wireGear();
-loadAutostart();
+function bootStep(name, fn) {
+  try { fn(); } catch (error) { console.error('boot:' + name, error); }
+}
+bootStep('resizers', wireResizers);
+bootStep('gear', wireGear);
+bootStep('autostart', loadAutostart);
 loadState().catch(function (err) { toast('Не удалось получить состояние: ' + err.message); });
 pollStats();
 setInterval(pollStats, 1500);
