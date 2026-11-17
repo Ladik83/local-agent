@@ -305,3 +305,18 @@ footer.statusbar { flex: 0 0 auto; z-index: 30; }
   border-radius: 99px; padding: 4px 11px; font: inherit; font-size: 12.5px; cursor: pointer;
 }
 .chip:hover { color: var(--text); border-color: var(--accent); }
+
+.drawerGrid { grid-template-columns: 0.95fr 1fr 1.15fr; align-items: start; }
+.drawerCol h4 { display: flex; align-items: center; justify-content: space-between; }
+.colBtn { font-size: 11px; padding: 1px 8px; margin-left: 8px; }
+.drawerCol { max-height: 42vh; overflow-y: auto; padding-right: 4px; }
+.advice { font-size: 12.5px; color: var(--muted); padding: 2px 0 6px; }
+.advice b { color: var(--text); }
+.tuneRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 3px 0; font-size: 12.5px; }
+.tuneRow select { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 3px 6px; font: inherit; }
+body.light {
+  --bg: #f6f7fb; --panel: #ffffff; --panel2: #eef1f7; --text: #1a1f2b;
+  --muted: #5d6675; --line: #d8dee9; --accent: #2f6bff;
+}
+body.bigFont { font-size: 17px; }
+body.hugeFont { font-size: 19px; }

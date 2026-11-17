@@ -17,6 +17,7 @@
  <button class="tab" data-tab="settings">Настройки</button>
  </nav>
  <div class="status"><span id="dot" class="dot"></span><span id="statusText">не загружена</span></div>
+ <button class="ghost" id="gearBtn" title="Настройки проекта">⚙</button>
  <button class="ghost" id="helpBtn" title="Как это работает">?</button>
 </header>
 
@@ -36,6 +37,7 @@
  </div>
  <div id="composer" class="composer">
  <textarea id="input" rows="1" placeholder="Спросите что угодно — про файлы, документы, код…"></textarea>
+ <button id="newChatBtn" class="ghost" title="Новый чат">+</button>
  <button id="stopBtn" class="ghost" title="Остановить ответ" style="display:none">■</button>
  <button id="micBtn" class="ghost" title="Голос: Ctrl+Alt+Space">🎤</button>
  <button id="send" class="primary" title="Отправить">Отправить</button>
@@ -116,28 +118,31 @@
 
 <div class="drawer" id="drawer">
  <div class="drawerGrid">
- <div class="drawerCol">
- <h4>Компьютер</h4>
- <div id="hwCard"></div>
- <h4>Ресурсы</h4>
- <div id="monRes"></div>
- <h4>Модель</h4>
- <div id="monModel"></div>
- </div>
- <div class="drawerCol">
- <h4>Токены и скорость</h4>
- <div id="monTokens"></div>
- <h4>Что происходит сейчас</h4>
- <div id="monNow"></div>
- <h4>Чаты</h4>
- <button class="ghost tiny wide" onclick="newChat()">Новый чат</button>
- <div id="chatsList"></div>
- </div>
- <div class="drawerCol">
- <h4>Проекты</h4>
- <div id="projectsList"></div>
- <div class="accAdd"><input id="projPath" type="text" placeholder="C:\путь\к\папке"><button class="ghost tiny" onclick="addProject()">+</button></div>
- </div>
+  <div class="drawerCol">
+   <h4>Проекты и рабочие папки</h4>
+   <div id="projectsList"></div>
+   <div class="accAdd"><input id="projPath" type="text" placeholder="C:\путь\к\папке"><button class="ghost tiny" onclick="addProject()">+</button></div>
+  </div>
+  <div class="drawerCol">
+   <h4>Чаты<button class="ghost tiny colBtn" onclick="newChat()">+ новый</button></h4>
+   <div id="chatsList"></div>
+   <h4>Токены и скорость</h4>
+   <div id="monTokens"></div>
+  </div>
+  <div class="drawerCol">
+   <h4>Компьютер</h4>
+   <div id="hwCard"></div>
+   <h4>Ресурсы</h4>
+   <div id="monRes"></div>
+   <h4>Модель</h4>
+   <div id="monModel"></div>
+   <h4>Рекомендация под этот ПК</h4>
+   <div id="modelAdvice"></div>
+   <h4>Настройки модели</h4>
+   <div id="modelTuning"></div>
+   <h4>Что происходит сейчас</h4>
+   <div id="monNow"></div>
+  </div>
  </div>
 </div>
 
@@ -152,6 +157,26 @@
  <span class="sbRight"><span id="sbPort">порт —</span> · <span id="sbVersion">v0.4</span></span>
 </footer>
 
+<div class="modalBack" id="gearModal">
+ <div class="modal">
+  <h3>Настройки проекта</h3>
+  <div class="panel">
+   <div class="row"><span>Версия</span><span class="sub" id="gearVersion">—</span></div>
+   <div class="row"><span>Обновления</span><span><button class="ghost" id="gearCheck">Проверить</button></span></div>
+   <div class="sub" id="gearUpdateText"></div>
+  </div>
+  <div class="panel">
+   <div class="row"><span>Тема</span><select id="gearTheme"><option value="dark">тёмная</option><option value="light">светлая</option></select></div>
+   <div class="row"><span>Размер текста</span><select id="gearFont"><option value="15">обычный</option><option value="17">крупный</option><option value="19">очень крупный</option></select></div>
+  </div>
+  <div class="panel">
+   <div class="row"><span>Подключение</span><button class="ghost" id="gearProviders">Открыть</button></div>
+   <div class="row"><span>Папка проекта</span><button class="ghost" id="gearData">Открыть</button></div>
+   <div class="row"><span>Порт</span><span class="sub" id="gearPort">—</span></div>
+  </div>
+  <div class="row"><span></span><button class="primary" id="gearClose">Готово</button></div>
+ </div>
+</div>
 <div class="modalBack" id="helpModal">
  <div class="modal">
  <h3>Как пользоваться</h3>

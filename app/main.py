@@ -12,7 +12,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import agent, autostart, catalog, chats, config, drives, engine, hardware, keystore, mcp, orchestrator, providers, rag, roles, scan, stats, tools, voice
+from . import agent, autostart, catalog, chats, config, drives, engine, hardware, keystore, mcp, orchestrator, providers, rag, roles, scan, stats, tools, updater, voice
 
 UI_DIR = pathlib.Path(__file__).parent / "ui"
 TOKEN_FILE = config.DATA_DIR / "access.token"
@@ -219,6 +219,20 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(chats.load((query.get("id") or [""])[0]))
             elif route == "/api/job":
                 self._send({"engine": dict(engine.JOB), "download": dict(DL), "discover": dict(DISC)})
+            elif route == "/api/version":
+                self._send({"version": updater.current_version(),
+                            "port": self.server.server_port,
+                            "data_dir": str(config.DATA_DIR),
+                            "pending": updater.pending_info()})
+            elif route == "/api/update/check":
+                link = str(data.get("url") or config.load().get("update_url") or "")
+                if not link:
+                    self._send({"ok": False, "error": "Адрес обновлений не задан в настройках"})
+                    return
+                self._send(updater.check(link))
+            elif route == "/api/update/apply":
+                link = str(data.get("url") or config.load().get("update_url") or "")
+                self._send(updater.download_and_apply(link, str(data.get("zip") or "")))
             elif route == "/api/autostart":
                 self._send(autostart.status())
             elif route == "/api/rag":

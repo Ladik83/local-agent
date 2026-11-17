@@ -227,7 +227,7 @@ def _find_payload(root: Path):
 def _verify_payload(app_dir: Path, expected: tuple = ()):
     """Проверяем набор модулей: (ошибки, предупреждения).
 
-    Ошибки блокируют установку. Ошибки синтаксиса в [PERSON_NAME]
+    Ошибки не дают ставить архив. Сломанный модуль — лишь пометка в логе.
     только предупреждают: архив может нести уже сломанный модуль.
     """
     problems = []
@@ -338,7 +338,7 @@ def pending_info():
 
 def _install_from_zip(zip_path: Path, version: str = "") -> dict:
     """Распаковать архив, проверить и подменить папку app."""
-    out = {"ok": False, "applied": False, "pending": False, "files": 0, "error": "", "message": ""}
+    out = {"ok": False, "applied": False, "pending": False, "files": 0, "error": "", "message": "", "warnings": []}
     zip_path = Path(zip_path)
     if not zip_path.is_file():
         out["error"] = "Архив обновления не найден"
@@ -381,6 +381,15 @@ def _install_from_zip(zip_path: Path, version: str = "") -> dict:
             return out
         out["files"] = len([item for item in payload.rglob("*.py") if item.is_file()])
 
+        version_text = ""
+        for candidate in (payload.parent / "VERSION", payload / "VERSION"):
+            try:
+                if candidate.is_file():
+                    version_text = candidate.read_text(encoding="utf-8").strip()
+                    break
+            except (OSError, UnicodeDecodeError):
+                continue
+
         try:
             _swap_in(payload)
         except OSError as exc:
@@ -392,6 +401,13 @@ def _install_from_zip(zip_path: Path, version: str = "") -> dict:
                 "message": "Файлы заняты. Обновление применится после перезапуска.",
             })
             return out
+
+        if version_text:
+            try:
+                (ROOT_DIR / "VERSION").write_text(version_text + chr(10), encoding="utf-8")
+                out["version_file"] = version_text
+            except OSError as exc:
+                out["warnings"].append("не записался VERSION: %s" % exc)
 
         out.update({"ok": True, "applied": True, "pending": False,
                     "message": "Обновление установлено"})
@@ -415,6 +431,7 @@ def download_and_apply(manifest_url: str, zip_url: str = "", timeout: float = 10
         "files": 0,
         "error": "",
         "message": "",
+        "warnings": [],
     }
 
     latest = ""
@@ -464,6 +481,8 @@ def download_and_apply(manifest_url: str, zip_url: str = "", timeout: float = 10
                     "files": int(result.get("files") or 0),
                     "error": result.get("error") or "",
                     "message": result.get("message") or "",
+                    "version": result.get("version_file") or latest or current,
+                    "warnings": result.get("warnings") or [],
                 })
 
     LAST_ERROR = out["error"]

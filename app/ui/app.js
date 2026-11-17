@@ -1043,6 +1043,8 @@ function render() {
     ? 'модель загружена'
     : (STATE.engine.installed ? 'модель не загружена' : 'движок не установлен');
   renderHardware();
+  renderAdvice();
+  renderTuning();
   renderLocalModels();
   renderCatalog();
   renderSettings();
@@ -1071,6 +1073,157 @@ function useTemplate(name) {
   input.setSelectionRange(input.value.length, input.value.length);
 }
 
+async function loadModelDirect(path) {
+  toast('Загружаю модель…');
+  const res = await postJson('/api/model/load', { path: path });
+  if (res && res.ok) {
+    toast('Модель готова');
+    await loadState();
+  } else {
+    toast('Не вышло: ' + ((res && res.error) || 'ошибка'));
+  }
+}
+
+async function unloadDirect() {
+  await postJson('/api/model/unload', {});
+  toast('Модель выгружена');
+  await loadState();
+}
+
+function modelLabel(item) {
+  const name = String(item.file || item.id || '');
+  return name.length > 34 ? name.slice(0, 31) + '…' : name;
+}
+
+function renderAdvice() {
+  const box = document.getElementById('modelAdvice');
+  if (!box) return;
+  const models = STATE.models || [];
+  const hw = STATE.hardware || {};
+  const free = Number(hw.ram_free_gb || 0);
+  if (!models.length) {
+    box.innerHTML = '<div class="sub">Моделей нет. Вкладка Модели, кнопка Искать.</div>';
+    return;
+  }
+  const fits = models.filter(function (m) { return Number(m.size_gb || 0) <= free * 0.6; });
+  const small = fits.filter(function (m) { return Number(m.size_gb || 0) <= 5.5; });
+  const pick = function (list) {
+    return list.length ? list.reduce(function (a, b) { return Number(a.size_gb) > Number(b.size_gb) ? a : b; }) : null;
+  };
+  const fast = pick(small);
+  const strong = pick(fits);
+
+  const line = function (title, item, note) {
+    if (!item) return '<div class="advice"><b>' + title + '</b>: нет подходящей</div>';
+    return '<div class="advice"><b>' + title + '</b> · ' + gb(item.size_gb) +
+      '<div class="sub">' + esc(String(item.file)) + '</div>' +
+      '<div class="sub">' + note + '</div>' +
+      '<button class="ghost tiny" data-load="' + esc(item.id) + '">Загрузить</button></div>';
+  };
+
+  box.innerHTML = line('Быстро', fast, 'до 5.5 ГБ, отвечает резво') +
+    line('Качественно', strong, 'до 60% свободной памяти, медленнее') +
+    '<div class="sub">свободно ' + free.toFixed(1) + ' ГБ</div>';
+
+  Array.from(box.querySelectorAll('[data-load]')).forEach(function (button) {
+    button.onclick = function () { loadModelDirect(button.getAttribute('data-load')); };
+  });
+}
+
+function renderTuning() {
+  const box = document.getElementById('modelTuning');
+  if (!box) return;
+  const s = STATE.settings || {};
+  const temp = Number(s.temperature || 0.7);
+  const ctx = Number(s.context || 8192);
+  const temps = [[0.2, 'точная'], [0.4, 'спокойная'], [0.7, 'обычная'], [1, 'смелая']];
+  const ctxs = [[4096, '4 тыс.'], [8192, '8 тыс.'], [16384, '16 тыс.'], [32768, '32 тыс.']];
+  let html = '<div class="tuneRow"><span>Температура</span><select id="tuneTemp">';
+  temps.forEach(function (pair) {
+    html += '<option value="' + pair[0] + '"' + (Math.abs(pair[0] - temp) < 0.05 ? ' selected' : '') + '>' + pair[1] + '</option>';
+  });
+  html += '</select></div>';
+  html += '<div class="tuneRow"><span>Контекст</span><select id="tuneCtx">';
+  ctxs.forEach(function (pair) {
+    html += '<option value="' + pair[0] + '"' + (pair[0] === ctx ? ' selected' : '') + '>' + pair[1] + ' токенов</option>';
+  });
+  html += '</select></div>';
+  box.innerHTML = html;
+  const t = document.getElementById('tuneTemp');
+  const c = document.getElementById('tuneCtx');
+  if (t) t.onchange = function () { postJson('/api/settings', { temperature: Number(t.value) }); };
+  if (c) c.onchange = function () { postJson('/api/settings', { context: Number(c.value) }); };
+}
+
+async function openGear() {
+  const box = document.getElementById('gearModal');
+  if (!box) return;
+  box.classList.add('show');
+  try {
+    const info = await (await fetch('/api/version')).json();
+    window.__dataDir = info.data_dir || '';
+    document.getElementById('gearVersion').textContent = 'v' + (info.version || '—');
+    document.getElementById('gearPort').textContent = info.port || '—';
+    const pending = info.pending;
+    if (pending && pending.version) {
+      document.getElementById('gearUpdateText').textContent = 'Готово к установке: ' + pending.version;
+    }
+  } catch (error) {
+    document.getElementById('gearVersion').textContent = 'нет связи';
+  }
+}
+
+async function checkUpdates() {
+  const text = document.getElementById('gearUpdateText');
+  text.textContent = 'Проверяю…';
+  const res = await postJson('/api/update/check', {});
+  if (!res || res.ok === false) {
+    text.textContent = (res && res.error) || 'не удалось проверить';
+    return;
+  }
+  text.textContent = res.update
+    ? ('Есть версия ' + res.latest + ' — нажмите «Проверить» ещё раз для установки')
+    : ('У вас последняя версия ' + res.current);
+}
+
+function applyLook() {
+  const theme = localStorage.getItem('agentTheme') || 'dark';
+  const font = localStorage.getItem('agentFont') || '15';
+  document.body.classList.toggle('light', theme === 'light');
+  document.body.classList.toggle('bigFont', font === '17');
+  document.body.classList.toggle('hugeFont', font === '19');
+  const themeSelect = document.getElementById('gearTheme');
+  const fontSelect = document.getElementById('gearFont');
+  if (themeSelect) themeSelect.value = theme;
+  if (fontSelect) fontSelect.value = font;
+}
+
+function wireGear() {
+  const gear = document.getElementById('gearBtn');
+  if (gear) gear.onclick = openGear;
+  const close = document.getElementById('gearClose');
+  if (close) close.onclick = function () { document.getElementById('gearModal').classList.remove('show'); };
+  const box = document.getElementById('gearModal');
+  if (box) box.onclick = function (event) { if (event.target === box) box.classList.remove('show'); };
+  const check = document.getElementById('gearCheck');
+  if (check) check.onclick = checkUpdates;
+  const data = document.getElementById('gearData');
+  if (data) data.onclick = function () { postJson('/api/open', { path: window.__dataDir || '' }); };
+  const prov = document.getElementById('gearProviders');
+  if (prov) prov.onclick = function () {
+    box.classList.remove('show');
+    const tab = document.querySelector('.tab[data-tab="settings"]');
+    if (tab) tab.click();
+  };
+  const theme = document.getElementById('gearTheme');
+  if (theme) theme.onchange = function () { localStorage.setItem('agentTheme', theme.value); applyLook(); };
+  const font = document.getElementById('gearFont');
+  if (font) font.onchange = function () { localStorage.setItem('agentFont', font.value); applyLook(); };
+  const plus = document.getElementById('newChatBtn');
+  if (plus) plus.onclick = function () { newChat(); };
+  applyLook();
+}
+
 async function loadAutostart() {
   const box = document.getElementById('autostart');
   if (!box) return;
@@ -1087,7 +1240,6 @@ async function toggleAutostart(enabled) {
   const res = await postJson('/api/autostart', { enabled: enabled });
   if (res && res.ok) toast(enabled ? '[PERSON_NAME] входе: включено' : '[PERSON_NAME] входе: выключено');
   else toast('Не вышло: ' + ((res && res.detail) || 'нет ответа'));
-  loadAutostart();
 }
 
 async function loadKB() {
@@ -1221,6 +1373,20 @@ inputBox.addEventListener('input', function () {
   inputBox.style.height = Math.min(inputBox.scrollHeight, 200) + 'px';
 });
 
+wireGear();
+loadAutostart();
 loadState().catch(function (err) { toast('Не удалось получить состояние: ' + err.message); });
 pollStats();
 setInterval(pollStats, 1500);
+
+// ПОКАЗ ВЕРСИИ в статусной строке
+(async function () {
+  try {
+    const res = await fetch('/api/version');
+    const data = await res.json();
+    const box = document.getElementById('sbVersion');
+    if (box && data.version) box.textContent = 'v' + data.version;
+  } catch (error) {
+    return;
+  }
+})();

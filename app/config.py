@@ -92,6 +92,7 @@ DEFAULTS: dict = {
     "mcp": [],                   # подключённые внешние наборы инструментов
     "projects": [],              # рабочие папки пользователя
     "voice_tts": False,          # озвучивать ответы голосом
+    "update_url": "",           # ссылка на манифест обновлений
     "approval_mode": "ask",      # ask | auto — подтверждать запись файлов и команды
     "voice_model": "turbo",      # base | small | turbo
     "voice_lang": "ru",          # ru | en | auto
