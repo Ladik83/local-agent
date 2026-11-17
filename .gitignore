@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.cache/
+dist/
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.log
+.DS_Store

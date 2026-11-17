@@ -1,0 +1,100 @@
+"""Хранилище ключей API: лежат на диске зашифрованными, а не открытым текстом.
+
+Ключ выводится из локальной соли и имени пользователя (PBKDF2 + blake2b-поток),
+поэтому файл нельзя прочитать на другой машине или под другим пользователем.
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import os
+
+from . import config
+
+STORE = config.DATA_DIR / "keys.json"
+SALT = config.DATA_DIR / "keys.salt"
+
+
+def _salt() -> bytes:
+    try:
+        return SALT.read_bytes()
+    except OSError:
+        raw = os.urandom(16)
+        try:
+            SALT.write_bytes(raw)
+        except OSError:
+            pass
+        return raw
+
+
+def _key() -> bytes:
+    seed = (_salt() + os.environ.get("USERNAME", "").encode("utf-8", "replace") +
+            os.environ.get("COMPUTERNAME", "").encode("utf-8", "replace"))
+    return hashlib.pbkdf2_hmac("sha256", seed, b"local-agent-keys", 200000, dklen=32)
+
+
+def _keystream(length: int, key: bytes, nonce: bytes) -> bytes:
+    out = b""
+    counter = 0
+    while len(out) < length:
+        out += hashlib.blake2b(nonce + counter.to_bytes(4, "big"), key=key, digest_size=32).digest()
+        counter += 1
+    return out[:length]
+
+
+def protect(text: str) -> str:
+    key = _key()
+    nonce = os.urandom(12)
+    raw = text.encode("utf-8")
+    body = bytes(a ^ b for a, b in zip(raw, _keystream(len(raw), key, nonce)))
+    return base64.b64encode(nonce + body).decode("ascii")
+
+
+def unprotect(packed: str) -> str:
+    key = _key()
+    data = base64.b64decode(packed.encode("ascii"))
+    nonce, body = data[:12], data[12:]
+    raw = bytes(a ^ b for a, b in zip(body, _keystream(len(body), key, nonce)))
+    return raw.decode("utf-8")
+
+
+def load() -> dict:
+    try:
+        return json.loads(STORE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save(data: dict) -> None:
+    try:
+        STORE.write_text(json.dumps(data), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def put(name: str, value: str) -> None:
+    data = load()
+    data[name] = protect(value)
+    save(data)
+
+
+def get(name: str) -> str:
+    packed = load().get(name)
+    if not packed:
+        return ""
+    try:
+        return unprotect(packed)
+    except Exception:
+        return ""
+
+
+def drop(name: str) -> None:
+    data = load()
+    if name in data:
+        data.pop(name)
+        save(data)
+
+
+def names() -> list:
+    return sorted(load().keys())

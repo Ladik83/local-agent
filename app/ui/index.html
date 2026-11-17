@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Локальный агент</title>
+<link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+<header class="bar">
+ <div class="brand">Локальный <b>агент</b></div>
+ <nav class="tabs">
+ <button class="tab active" data-tab="chat">Чат</button>
+ <button class="tab" data-tab="models">Модели</button>
+ <button class="tab" data-tab="agents">Команда</button>
+ <button class="tab" data-tab="kb">Знания</button>
+ <button class="tab" data-tab="settings">Настройки</button>
+ </nav>
+ <div class="status"><span id="dot" class="dot"></span><span id="statusText">не загружена</span></div>
+ <button class="ghost" id="helpBtn" title="Как это работает">?</button>
+</header>
+
+<main>
+ <section id="view-chat" class="view active">
+ <div id="chatBar" class="chatBar"></div>
+ <div id="messages" class="messages"></div>
+ <div class="modes">
+ <button class="mode active" data-mode="agent">Один помощник<span class="help" data-tip="Обычный режим: на ваш вопрос отвечает одна модель. Быстро и просто — для повседневных задач.">?</span></button>
+ <button class="mode" data-mode="team">Команда специалистов<span class="help" data-tip="Сложную задачу по очереди разбирают несколько ролей: аналитик, разработчик, ревьюер и другие. Дольше, но глубже.">?</span></button>
+ </div>
+ <div id="composer" class="composer">
+ <textarea id="input" rows="1" placeholder="Спросите что угодно — про файлы, документы, код…"></textarea>
+ <button id="stopBtn" class="ghost" title="Остановить ответ" style="display:none">■</button>
+ <button id="micBtn" class="ghost" title="Голос: Ctrl+Alt+Space">🎤</button>
+ <button id="send" class="primary" title="Отправить">Отправить</button>
+ </div>
+ <div class="hint">Enter — отправить, Shift+Enter — новая строка</div>
+ </section>
+
+ <section id="view-models" class="view">
+ <h2>Модели на этом компьютере</h2>
+ <p class="sub" id="modelsSub"></p>
+ <div class="panel">
+ <div class="row"><span>Найти модели на всех дисках компьютера</span><button class="ghost" id="discoverBtn">Искать</button></div>
+ <div class="progress" id="discProgress" style="display:none"><i></i></div>
+ <div class="sub" id="discText"></div>
+ </div>
+ <div id="localModels" class="cards"></div>
+ <h2>Скачать модель</h2>
+    <p class="sub">Подбор идёт сам. Смотрите на память и видеокарту.</p>
+ <div id="catalog" class="cards"></div>
+ </section>
+
+ <section id="view-kb" class="view">
+ <h2>База знаний</h2>
+ <p class="sub">Папки и документы, по которым агент ищет ответ с источником. Всё лежит на этом компьютере.</p>
+ <div class="panel">
+  <div class="row"><span>Добавить папку или файл</span><input type="text" id="kbPath" class="wide" placeholder="C:\Users\volko\Documents"></div>
+  <div class="row"><span class="sub" id="kbStat"></span><button class="primary" id="kbAdd">Проиндексировать</button></div>
+  <div class="sub" id="kbStatus"></div>
+ </div>
+ <div class="panel">
+  <div class="row"><span>Поиск по базе</span><input type="text" id="kbQuery" class="wide" placeholder="например: договор аренды"></div>
+  <div id="kbHits"></div>
+ </div>
+ <div class="panel" id="kbList"></div>
+ </section>
+
+ <section id="view-agents" class="view">
+ <h2>Команда агентов</h2>
+    <p class="sub">Своя роль, свои размышления, свои инструменты. План делит задача.</p>
+ <div class="panel" id="rolesPanel"></div>
+ <div class="row"><span></span><button class="primary" id="saveRoles">Сохранить роли</button></div>
+ </section>
+
+ <section id="view-settings" class="view">
+ <h2>Модель и подключение</h2>
+ <div class="panel" id="providerPanel"></div>
+ <div class="panel" id="mcpPanel"></div>
+ <h2>Настройки</h2>
+ <div class="panel" id="voicePanel"></div>
+ <div class="panel" id="enginePanel"></div>
+ <div class="panel">
+ <label class="row"><span>Опасные действия агента (запись файлов, команды)</span>
+ <select id="approvalMode">
+ <option value="ask">спрашивать каждый раз</option>
+ <option value="auto">разрешать автоматически</option>
+ </select>
+ </label>
+      <label class="row"><span>Запускать при входе в Windows</span><input type="checkbox" id="autostart"></label>
+ <label class="row"><span>Агент может менять файлы</span><input type="checkbox" id="allowWrite"></label>
+ <label class="row"><span>Агент может запускать команды</span><input type="checkbox" id="allowShell"></label>
+ <label class="row"><span>Агент может искать в интернете</span><input type="checkbox" id="allowWeb"></label>
+ </div>
+ <div class="panel">
+ <label class="row"><span>Папка моделей</span><input type="text" id="modelsDir" class="wide"></label>
+ <label class="row"><span>Дополнительные папки (через ;)</span><input type="text" id="extraDirs" class="wide" placeholder="D:\Models"></label>
+ <label class="row"><span>Контекст</span>
+ <select id="context">
+ <option value="4096">4 096</option>
+ <option value="8192">8 192</option>
+ <option value="16384">16 384</option>
+ <option value="32768">32 768</option>
+ </select>
+ </label>
+ <button id="saveSettings" class="primary">Сохранить</button>
+ </div>
+ </section>
+</main>
+
+<div class="drawer" id="drawer">
+ <div class="drawerGrid">
+ <div class="drawerCol">
+ <h4>Компьютер</h4>
+ <div id="hwCard"></div>
+ <h4>Ресурсы</h4>
+ <div id="monRes"></div>
+ <h4>Модель</h4>
+ <div id="monModel"></div>
+ </div>
+ <div class="drawerCol">
+ <h4>Токены и скорость</h4>
+ <div id="monTokens"></div>
+ <h4>Что происходит сейчас</h4>
+ <div id="monNow"></div>
+ <h4>Чаты</h4>
+ <button class="ghost tiny wide" onclick="newChat()">Новый чат</button>
+ <div id="chatsList"></div>
+ </div>
+ <div class="drawerCol">
+ <h4>Проекты</h4>
+ <div id="projectsList"></div>
+ <div class="accAdd"><input id="projPath" type="text" placeholder="C:\путь\к\папке"><button class="ghost tiny" onclick="addProject()">+</button></div>
+ </div>
+ </div>
+</div>
+
+<footer class="statusbar">
+ <button class="sbBtn" onclick="toggleDrawer()"><span id="sbChevron">▴</span> Панели</button>
+ <span class="sbItem" id="sbModel">модель: не загружена</span>
+ <span class="sbItem" id="sbCpu">ЦП —</span>
+ <span class="sbItem" id="sbRam">ОЗУ —</span>
+ <span class="sbItem" id="sbTok">токены —</span>
+ <span class="sbItem" id="sbSpeed">— ток/с</span>
+ <span class="sbItem" id="sbNow">ожидание</span>
+ <span class="sbRight"><span id="sbPort">порт —</span> · <span id="sbVersion">v0.4</span></span>
+</footer>
+
+<div class="modalBack" id="helpModal">
+ <div class="modal">
+ <h3>Как пользоваться</h3>
+ <h4>Три шага</h4>
+ <ul>
+ <li>Вкладка «Модели» → «Запустить» на модели с пометкой «рекомендуем». Первый запуск 10–60 секунд.</li>
+ <li>Вкладка «Чат» → напишите вопрос и нажмите «Отправить» (Enter).</li>
+      <li>Мало памяти? Кнопка «Выгрузить» вернёт её.</li>
+ </ul>
+ <h4>Два режима работы</h4>
+ <ul>
+ <li><b>Один помощник</b> — быстро, для обычных вопросов.</li>
+ <li><b>Команда специалистов</b> — задачу по очереди разбирают роли. Настройка — вкладка «Команда».</li>
+ </ul>
+ <h4>Откуда брать модель</h4>
+ <ul>
+ <li><b>Локально</b> — приложение само запускает модель из папки моделей.</li>
+      <li><b>Свой сервер</b> — LM Studio или Ollama. Жмите «Найти серверы».</li>
+ <li><b>Внешний API</b> — облако по ключу (OpenRouter и подобные).</li>
+ </ul>
+ <h4>Нижняя панель</h4>
+    <p>Кнопка «Панели» показывает модель, чаты и проекты. Внизу видно модель, память и действие.</p>
+ <div class="row"><span></span><button class="primary" id="helpClose">Понятно</button></div>
+ </div>
+</div>
+<div class="modalBack" id="approveModal">
+ <div class="modal" id="approveBody"></div>
+</div>
+<div id="toast" class="toast"></div>
+<script src="/ui/app.js"></script>
+</body>
+</html>
