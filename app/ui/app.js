@@ -1341,6 +1341,53 @@ async function toggleAutostart(enabled) {
   else toast('Не вышло: ' + ((res && res.detail) || 'нет ответа'));
 }
 
+async function loadTasks() {
+  const res = await fetch('/api/schedule');
+  const data = await res.json();
+  renderTasks(data.items || []);
+}
+
+function renderTasks(items) {
+  const box = document.getElementById('taskList');
+  if (!box) return;
+  if (!items.length) { box.innerHTML = '<div class="sub">Задач пока нет.</div>'; return; }
+  box.innerHTML = items.map(function (item) {
+    return '<div class="row"><span><b>' + esc(item.time) + '</b> ' + esc(item.days || 'daily') +
+      '<div class="sub">' + esc((item.task || '').slice(0, 90)) + '</div></span>' +
+      '<span><button class="ghost tiny" data-run="' + esc(item.id) + '">Запустить</button> ' +
+      '<button class="ghost tiny" data-del="' + esc(item.id) + '">Удалить</button></span></div>';
+  }).join('');
+  Array.prototype.slice.call(box.querySelectorAll('[data-run]')).forEach(function (button) {
+    button.onclick = function () { runTask(button.getAttribute('data-run')); };
+  });
+  Array.prototype.slice.call(box.querySelectorAll('[data-del]')).forEach(function (button) {
+    button.onclick = function () { deleteTask(button.getAttribute('data-del')); };
+  });
+}
+
+async function saveTask() {
+  const item = {
+    time: document.getElementById('taskTime').value || '09:00',
+    days: document.getElementById('taskDays').value,
+    mode: document.getElementById('taskMode').value,
+    task: (document.getElementById('taskPrompt').value || '').trim()
+  };
+  if (!item.task) { toast('Опишите задачу'); return; }
+  const res = await postJson('/api/schedule/save', item);
+  toast(res && res.ok ? 'Задача сохранена' : 'Не вышло: ' + ((res && res.error) || 'ошибка'));
+  document.getElementById('taskPrompt').value = '';
+  loadTasks();
+}
+
+async function deleteTask(id) {
+  await postJson('/api/schedule/delete', { id: id });
+  loadTasks();
+}
+
+async function runTask(id) {
+  await postJson('/api/schedule/run', { id: id });
+  toast('Задача запущена, результат будет в чатах');
+}
 async function loadKB() {
   const res = await fetch('/api/rag');
   const data = await res.json();
@@ -1439,6 +1486,7 @@ document.querySelectorAll('.tab').forEach(function (button) {
     target.classList.add('active');
     target.scrollTop = 0;
     if (button.dataset.tab === 'kb') loadKB();
+    if (button.dataset.tab === 'tasks') loadTasks();
   });
 });
 

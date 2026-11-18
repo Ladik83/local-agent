@@ -14,7 +14,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import agent, attach, autostart, catalog, chats, config, drives, engine, hardware, keystore, mcp, orchestrator, panels, providers, rag, roles, scan, stats, tools, updater, voice
+from . import agent, attach, autostart, catalog, chats as chats_mod, schedule, chats, config, drives, engine, hardware, keystore, mcp, orchestrator, panels, providers, rag, roles, scan, stats, tools, updater, voice
 
 UI_DIR = pathlib.Path(__file__).parent / "ui"
 TOKEN_FILE = config.DATA_DIR / "access.token"
@@ -233,6 +233,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({"engine": dict(engine.JOB), "download": dict(DL), "discover": dict(DISC)})
             elif route == "/api/panels":
                 self._send(panels.snapshot())
+            elif route == "/api/schedule":
+                self._send({"items": schedule.list_all()})
             elif route == "/api/jobs":
                 self._send({"jobs": JOBS})
             elif route == "/api/version":
@@ -395,6 +397,17 @@ class Handler(BaseHTTPRequestHandler):
             elif route == "/api/autostart":
                 want = bool(data.get("enabled"))
                 self._send(autostart.set_enabled(want))
+            elif route == "/api/schedule/save":
+                self._send(schedule.upsert(data or {}))
+            elif route == "/api/schedule/delete":
+                self._send(schedule.remove(str(data.get("id") or "")))
+            elif route == "/api/schedule/run":
+                wanted = schedule.get(str(data.get("id") or ""))
+                if not wanted:
+                    self._send({"ok": False, "error": "задача не найдена"})
+                else:
+                    threading.Thread(target=_run_scheduled, args=(wanted,), daemon=True).start()
+                    self._send({"ok": True, "started": True})
             elif route == "/api/attach":
                 self._send(attach.extract(str(data.get("path") or "")))
             elif route == "/api/attach/upload":
@@ -554,6 +567,41 @@ def _start_job(name, func):
 
     threading.Thread(target=worker, daemon=True).start()
     return {"ok": True, "started": True, "job": name}
+
+
+def _run_scheduled(entry):
+    try:
+        cfg = config.load()
+        target = providers.resolve(cfg)
+        if not target.get("base_url"):
+            diag.warn("schedule", "модель не загружена, задача пропущена")
+            return
+        convo = [{"role": "user", "content": str(entry.get("task") or "")}]
+        if not convo[0]["content"]:
+            return
+        quiet = lambda event: None
+        if str(entry.get("mode") or "agent") == "team":
+            orchestrator.run(convo[0]["content"], cfg, quiet, target)
+            return
+        result = agent.chat(convo, cfg, quiet, target)
+        try:
+            chat_id = "task-" + str(entry.get("id")) + "-" + time.strftime("%Y%m%d-%H%M")
+            chats_mod.save(chat_id, result, "Задача по расписанию: " + str(entry.get("title") or entry.get("task"))[:60])
+        except Exception as exc:
+            diag.warn("schedule/save", exc)
+    except Exception as exc:
+        diag.warn("schedule/run", exc)
+
+
+def _scheduler_loop():
+    while True:
+        try:
+            for entry in schedule.due():
+                schedule.mark_ran(str(entry.get("id")), "запущено")
+                threading.Thread(target=_run_scheduled, args=(entry,), daemon=True).start()
+        except Exception as exc:
+            diag.warn("scheduler", exc)
+        time.sleep(20)
 
 def emit_console(event: dict) -> None:
     print("approval:", event.get("tool"), flush=True)

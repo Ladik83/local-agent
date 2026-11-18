@@ -109,3 +109,9 @@
 - app/attach.py: текст из txt/md/csv/code/docx/xlsx, pdf через pdftotext если есть, картинки как отметка; лимит 20 МБ, 60к символов.
 - Маршруты POST /api/attach и /api/attach/upload; drag&drop в чате, чипы вложений, текст уходит в сообщение.
 - Вложения читаются без allow-list только из DATA_DIR/attachments, всё остальное через _resolve.
+
+**2026-11-18 — планировщик**
+- app/schedule.py: задачи в schedules.json (time, days, mode, task), due(), mark_ran(), get/upsert/remove.
+- Поток _scheduler_loop раз [PERSON_NAME] 20 с, запуск через _run_scheduled -> agent.chat или orchestrator.run, результат в чаты (task-<id>-<дата>).
+- Маршруты GET /api/schedule, POST /api/schedule/save|delete|run; вкладка «Задачи» с формой и списком.
+- Если модель не загружена — задача пропускается с записью в logs/app.log.

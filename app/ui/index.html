@@ -13,6 +13,7 @@
  <button class="tab active" data-tab="chat">Чат</button>
  <button class="tab" data-tab="models">Модели</button>
  <button class="tab" data-tab="agents">Команда</button>
+ <button class="tab" data-tab="tasks">Задачи</button>
  <button class="tab" data-tab="kb">Знания</button>
  <button class="tab" data-tab="settings">Настройки</button>
  </nav>
@@ -61,6 +62,25 @@
  <div id="catalog" class="cards"></div>
  </section>
 
+ <section id="view-tasks" class="view">
+ <h2>Задачи по расписанию</h2>
+ <p class="sub">Агент сам выполняет задачу в нужное время, результат попадает в чаты.</p>
+ <div class="panel">
+  <div class="row"><span>Время</span><input type="time" id="taskTime" value="09:00"></div>
+  <div class="row"><span>Когда</span><select id="taskDays">
+   <option value="daily">каждый день</option>
+   <option value="weekdays">по будням</option>
+   <option value="weekends">по выходным</option>
+  </select></div>
+  <div class="row"><span>Режим</span><select id="taskMode">
+   <option value="agent">один помощник</option>
+   <option value="team">команда специалистов</option>
+  </select></div>
+  <div class="row"><span>Задача</span><textarea id="taskPrompt" rows="2" class="wide" placeholder="Собери сводку по папке Загрузки"></textarea></div>
+  <div class="row"><span></span><button class="primary" id="taskSave">Сохранить задачу</button></div>
+ </div>
+ <div class="panel" id="taskList"></div>
+ </section>
  <section id="view-kb" class="view">
  <h2>База знаний</h2>
  <p class="sub">Папки и документы, по которым агент ищет ответ с источником. Всё лежит на этом компьютере.</p>
