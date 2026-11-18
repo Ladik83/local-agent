@@ -1341,6 +1341,25 @@ async function toggleAutostart(enabled) {
   else toast('Не вышло: ' + ((res && res.detail) || 'нет ответа'));
 }
 
+async function loadLan() {
+  const box = document.getElementById('lanAccess');
+  const hint = document.getElementById('lanHint');
+  const links = document.getElementById('lanLinks');
+  if (!box) return;
+  const res = await fetch('/api/lan');
+  const data = await res.json();
+  box.checked = !!data.enabled;
+  if (hint) hint.textContent = data.enabled
+    ? 'Включено: телефон в той же сети откроет агента по ссылке ниже.'
+    : 'Выключено: сервер слушает только этот компьютер.';
+  if (links) links.innerHTML = (data.urls || []).map(function (url) {
+    return '<div>' + esc(url) + '</div>';
+  }).join('');
+  box.onchange = async function () {
+    await postJson('/api/settings', { lan_access: box.checked });
+    toast('Перезапустите приложение, чтобы применить');
+  };
+}
 async function loadTasks() {
   const res = await fetch('/api/schedule');
   const data = await res.json();
@@ -1487,6 +1506,7 @@ document.querySelectorAll('.tab').forEach(function (button) {
     target.scrollTop = 0;
     if (button.dataset.tab === 'kb') loadKB();
     if (button.dataset.tab === 'tasks') loadTasks();
+    if (button.dataset.tab === 'settings') loadLan();
   });
 });
 
@@ -1577,3 +1597,7 @@ setInterval(pollStats, 1500);
     });
   });
 })();
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/ui/sw.js').catch(function () { return; });
+}

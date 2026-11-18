@@ -178,12 +178,26 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _static(self, name: str):
+        if name.endswith(".webmanifest"):
+            self.send_response(200)
+            self.send_header("Content-Type", "application/manifest+json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            body = (UI_DIR / "manifest.webmanifest").read_bytes()
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         safe = name.replace("\\", "/").split("/")[-1]
         path = UI_DIR / safe
         if not path.is_file():
             self.send_error(404, "not found")
             return
         data = path.read_bytes()
+        peer = self.client_address[0]
+        local_peer = peer in ("[IP_ADDRESS]", "::1")
+        if path.name == "index.html" and not local_peer and not self._authorized():
+            self._send({"error": "нужен токен: откройте ссылку из приложения"}, 401)
+            return
         if path.name == "index.html":
             data = data.replace(b"</head>", ("<meta name=\"agent-token\" content=\"" + ACCESS_TOKEN + "\"></head>").encode("utf-8"), 1)
         ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
@@ -233,6 +247,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({"engine": dict(engine.JOB), "download": dict(DL), "discover": dict(DISC)})
             elif route == "/api/panels":
                 self._send(panels.snapshot())
+            elif route == "/api/lan":
+                cfg_now = config.load()
+                port_now = self.server.server_port
+                links = []
+                for ip in lan_urls():
+                    links.append("http://" + ip + ":" + str(port_now) + "/?token=" + ACCESS_TOKEN)
+                self._send({"enabled": bool(cfg_now.get("lan_access")), "port": port_now, "urls": links})
             elif route == "/api/schedule":
                 self._send({"items": schedule.list_all()})
             elif route == "/api/jobs":
@@ -606,6 +627,20 @@ def _scheduler_loop():
 def emit_console(event: dict) -> None:
     print("approval:", event.get("tool"), flush=True)
 
+
+
+
+def lan_urls():
+    out = []
+    try:
+        import socket as _socket
+        for info in _socket.getaddrinfo(_socket.gethostname(), None, _socket.AF_INET):
+            ip = info[4][0]
+            if ip and not ip.startswith("127.") and ip not in out:
+                out.append(ip)
+    except Exception as exc:
+        diag.warn("lan_urls", exc)
+    return out
 
 def _alive(port: int) -> bool:
     try:

@@ -115,3 +115,9 @@
 - Поток _scheduler_loop раз [PERSON_NAME] 20 с, запуск через _run_scheduled -> agent.chat или orchestrator.run, результат в чаты (task-<id>-<дата>).
 - Маршруты GET /api/schedule, POST /api/schedule/save|delete|run; вкладка «Задачи» с формой и списком.
 - Если модель не загружена — задача пропускается с записью в logs/app.log.
+
+**2026-11-18 — PWA и доступ с телефона**
+- app/ui/manifest.webmanifest, icon.svg, sw.js (кэш оболочки, API всегда из сети).
+- Настройка lan_access (по умолчанию выкл): при включении сервер слушает [IP_ADDRESS], страница отдаётся только с токеном, Host-проверка допускает локальные IP.
+- GET /api/lan отдаёт готовые ссылки с токеном; в Настройках галочка и список адресов.
+- Проверено: /api/lan (3 адреса), манифест [PERSON_NAME]-json, icon.svg, sw.js отдаются, включение lan_access переводит привязку на [IP_ADDRESS].
