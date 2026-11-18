@@ -179,10 +179,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def _static(self, name: str):
         if name.endswith(".webmanifest"):
+            body = (UI_DIR / "manifest.webmanifest").read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", "application/manifest+json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
-            body = (UI_DIR / "manifest.webmanifest").read_bytes()
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -192,21 +192,24 @@ class Handler(BaseHTTPRequestHandler):
         if not path.is_file():
             self.send_error(404, "not found")
             return
-        data = path.read_bytes()
-        peer = self.client_address[0]
-        local_peer = peer in ("[IP_ADDRESS]", "::1")
+        peer = str(self.client_address[0])
+        if peer.startswith("::ffff:"):
+            peer = peer[7:]
+        local_peer = peer.startswith("127.") or peer in ("::1", "0:0:0:0:0:0:0:1")
         if path.name == "index.html" and not local_peer and not self._authorized():
             self._send({"error": "нужен токен: откройте ссылку из приложения"}, 401)
             return
+        data = path.read_bytes()
         if path.name == "index.html":
-            data = data.replace(b"</head>", ("<meta name=\"agent-token\" content=\"" + ACCESS_TOKEN + "\"></head>").encode("utf-8"), 1)
-        ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+            meta = "<meta name=\"agent-token\" content=\"" + ACCESS_TOKEN + "\"></head>"
+            data = data.replace(b"</head>", meta.encode("utf-8"), 1)
+        ctype = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
         if ctype.startswith("text/") or ctype == "application/javascript":
             ctype += "; charset=utf-8"
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")

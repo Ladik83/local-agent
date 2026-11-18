@@ -258,6 +258,8 @@ def search(query: str, limit: int = 5) -> list[dict]:
                 vec = json.loads(vec_json)
             except (ValueError, TypeError):
                 continue
+            if len(vec) != len(vector):
+                continue
             score = sum(a * b for a, b in zip(vector, vec))
             if score > 0.02:
                 scored.append((score, text, path))
