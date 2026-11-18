@@ -106,11 +106,18 @@ def check(url: str, timeout: float = 10) -> dict:
         "latest": "",
         "update": False,
         "url": "",
+        "sha256": "",
         "notes": "",
         "error": "",
     }
     if not isinstance(url, str) or not url.strip():
         result["error"] = "Не задан адрес манифеста"
+        return result
+
+    low = url.strip().lower()
+    safe_scheme = low.startswith("https://") or low.startswith("http://127.") or low.startswith("http://localhost")
+    if not safe_scheme:
+        result["error"] = "Разрешены https и локальный http"
         return result
 
     try:
@@ -140,6 +147,7 @@ def check(url: str, timeout: float = 10) -> dict:
     result["latest"] = latest
     result["url"] = str(data.get("url") or "").strip()
     result["notes"] = str(data.get("notes") or "")
+    result["sha256"] = str(data.get("sha256") or "").strip().lower()
     result["update"] = _version_tuple(latest) > _version_tuple(current)
     result["ok"] = True
     _log("проверка: текущая %s, в манифесте %s, обновление %s"
@@ -148,6 +156,20 @@ def check(url: str, timeout: float = 10) -> dict:
 
 
 # ---------------------------------------------------------------- скачивание
+
+def _sha256(path):
+    import hashlib as _h
+    h = _h.sha256()
+    f = open(str(path), "rb")
+    try:
+        while True:
+            chunk = f.read(65536)
+            if not chunk:
+                break
+            h.update(chunk)
+    finally:
+        f.close()
+    return h.hexdigest()
 
 def _download(url: str, timeout: float, filename: str = "") -> Path:
     """Качаем архив в папку загрузок, отдаём путь к файлу."""
@@ -435,6 +457,7 @@ def download_and_apply(manifest_url: str, zip_url: str = "", timeout: float = 10
     }
 
     latest = ""
+    expected = ""
     source = str(zip_url or "").strip()
     if not source:
         info = check(manifest_url, timeout=timeout)
@@ -443,6 +466,7 @@ def download_and_apply(manifest_url: str, zip_url: str = "", timeout: float = 10
             LAST_ERROR = out["error"]
             return out
         latest = info.get("latest") or ""
+        expected = info.get("sha256") or ""
         source = info.get("url") or ""
         if not source:
             out["error"] = "В манифесте нет ссылки на архив"
@@ -452,6 +476,7 @@ def download_and_apply(manifest_url: str, zip_url: str = "", timeout: float = 10
         info = check(manifest_url, timeout=timeout)
         if info.get("ok"):
             latest = info.get("latest") or ""
+            expected = info.get("sha256") or ""
 
     out["version"] = latest or current
 
@@ -464,7 +489,11 @@ def download_and_apply(manifest_url: str, zip_url: str = "", timeout: float = 10
     except (TimeoutError, OSError, ValueError) as exc:
         out["error"] = "Не удалось скачать архив: %s" % exc
     else:
-        if not zipfile.is_zipfile(str(package)):
+        if not expected:
+            out["error"] = "В манифесте нет sha256: обновление отклонено"
+        elif _sha256(package) != expected:
+            out["error"] = "Хэш архива не совпал с манифестом"
+        elif not zipfile.is_zipfile(str(package)):
             out["error"] = "Скачанный файл не является zip-архивом"
         else:
             try:

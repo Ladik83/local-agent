@@ -231,6 +231,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({"engine": dict(engine.JOB), "download": dict(DL), "discover": dict(DISC)})
             elif route == "/api/panels":
                 self._send(panels.snapshot())
+            elif route == "/api/jobs":
+                self._send({"jobs": JOBS})
             elif route == "/api/version":
                 self._send({"version": updater.current_version(),
                             "port": self.server.server_port,
@@ -335,7 +337,11 @@ class Handler(BaseHTTPRequestHandler):
                 config.save(patch)
                 self._send({"ok": True, "settings": config.load()})
             elif route == "/api/model/load":
-                self._send(engine.start(data.get("path") or config.load().get("last_model") or ""))
+                wanted = data.get("path") or config.load().get("last_model") or ""
+                if data.get("background"):
+                    self._send(_start_job("model_load", lambda p=wanted: engine.start(p)))
+                else:
+                    self._send(engine.start(wanted))
             elif route == "/api/model/stop":
                 engine.stop()
                 self._send({"ok": True})
@@ -388,7 +394,11 @@ class Handler(BaseHTTPRequestHandler):
                 want = bool(data.get("enabled"))
                 self._send(autostart.set_enabled(want))
             elif route == "/api/rag/add":
-                self._send(rag.add_path(str(data.get("path") or "")))
+                folder = str(data.get("path") or "")
+                if data.get("background", True):
+                    self._send(_start_job("rag_add", lambda t=folder: rag.add_path(t)))
+                else:
+                    self._send(rag.add_path(folder))
             elif route == "/api/rag/remove":
                 self._send(rag.remove_doc(str(data.get("path") or "")))
             elif route == "/api/rag/clear":
@@ -514,6 +524,28 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as exc:
             self._send({"error": str(exc)}, 500)
 
+
+
+JOBS = {}
+
+
+def _start_job(name, func):
+    if JOBS.get(name, {}).get("running"):
+        return {"ok": False, "error": "уже выполняется"}
+    JOBS[name] = {"running": True, "done": False, "result": None,
+                   "started": time.time(), "name": name}
+    record = JOBS[name]
+
+    def worker():
+        try:
+            record["result"] = func()
+        except Exception as exc:
+            record["result"] = {"ok": False, "error": str(exc)}
+        record["running"] = False
+        record["done"] = True
+
+    threading.Thread(target=worker, daemon=True).start()
+    return {"ok": True, "started": True, "job": name}
 
 def emit_console(event: dict) -> None:
     print("approval:", event.get("tool"), flush=True)

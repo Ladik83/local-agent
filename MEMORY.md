@@ -98,3 +98,8 @@
 - Отчёты: docs/AUDIT_2026-11.md (383 стр), docs/SECURITY.md (352), docs/COMPETITORS.md (180), docs/INTEGRATIONS.md (869).
 - Исправлено: fetch_url только http/https (file:// закрыт), deny-list на токены и ключи в _resolve, rag.add_path через _resolve, run_command без shell=True, Host-проверка (403 на чужой Host), заголовки X-Frame-Options/nosniff, esc() экранирует кавычки, MCP запускается только [PERSON_NAME], apply_pending при старте, _alive с токеном, убран двойной _send.
 - Осталось: подпись zip-обновлений, keystore на DPAPI (сейчас PBKDF2), долгие [PERSON_NAME] синхронно, 40 глухих except.
+
+**2026-11-18 — P0-долги**
+- Обновления: манифест обязан содержать sha256, иначе отказ; хэш сверяется после скачивания; разрешены https и локальный http.
+- keystore переведён на Windows DPAPI (blob с префиксом dpapi:), старые ключи без префикса читаются как раньше.
+- Фоновые задачи: JOBS + _start_job(), GET /api/jobs, у /api/rag/add и /api/model/load флаг background.

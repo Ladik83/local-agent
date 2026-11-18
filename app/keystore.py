@@ -1,16 +1,52 @@
-"""Хранилище ключей API: лежат на диске зашифрованными, а не открытым текстом.
-
-Ключ выводится из локальной соли и имени пользователя (PBKDF2 + blake2b-поток),
-поэтому файл нельзя прочитать на другой машине или под другим пользователем.
-"""
+"""Keystore: API keys are stored encrypted on disk."""
 from __future__ import annotations
 
 import base64
+import ctypes
 import hashlib
 import json
 import os
+import sys
 
 from . import config
+
+PREFIX = "dpapi:"
+LEGACY = "b64:"
+
+
+class _Blob(ctypes.Structure):
+    _fields_ = [("cbData", ctypes.c_ulong), ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+
+def dpapi_available() -> bool:
+    return sys.platform == "win32"
+
+
+def _dpapi(raw: bytes) -> bytes:
+    buf = ctypes.create_string_buffer(raw, len(raw))
+    src = _Blob(len(raw), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+    dst = _Blob()
+    ok = ctypes.windll.crypt32.CryptProtectData(ctypes.byref(src), None, None, None, None, 1, ctypes.byref(dst))
+    if not ok:
+        raise OSError("CryptProtectData failed")
+    try:
+        return ctypes.string_at(dst.pbData, dst.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(dst.pbData)
+
+
+def _undpapi(blob: bytes) -> bytes:
+    buf = ctypes.create_string_buffer(blob, len(blob))
+    src = _Blob(len(blob), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char)))
+    dst = _Blob()
+    ok = ctypes.windll.crypt32.CryptUnprotectData(ctypes.byref(src), None, None, None, None, 1, ctypes.byref(dst))
+    if not ok:
+        raise OSError("CryptUnprotectData failed")
+    try:
+        return ctypes.string_at(dst.pbData, dst.cbData)
+    finally:
+        ctypes.windll.kernel32.LocalFree(dst.pbData)
+
 
 STORE = config.DATA_DIR / "keys.json"
 SALT = config.DATA_DIR / "keys.salt"
@@ -44,19 +80,34 @@ def _keystream(length: int, key: bytes, nonce: bytes) -> bytes:
 
 
 def protect(text: str) -> str:
+    raw = text.encode("utf-8")
+    if dpapi_available():
+        try:
+            return PREFIX + base64.b64encode(_dpapi(raw)).decode("ascii")
+        except Exception:
+            pass
     key = _key()
     nonce = os.urandom(12)
-    raw = text.encode("utf-8")
     body = bytes(a ^ b for a, b in zip(raw, _keystream(len(raw), key, nonce)))
-    return base64.b64encode(nonce + body).decode("ascii")
+    return LEGACY + base64.b64encode(nonce + body).decode("ascii")
 
 
 def unprotect(packed: str) -> str:
+    packed = (packed or "").strip()
+    if packed.startswith(PREFIX):
+        blob = base64.b64decode(packed[len(PREFIX):].encode("ascii"))
+        return _undpapi(blob).decode("utf-8")
+    if packed.startswith(LEGACY):
+        packed = packed[len(LEGACY):]
     key = _key()
     data = base64.b64decode(packed.encode("ascii"))
     nonce, body = data[:12], data[12:]
     raw = bytes(a ^ b for a, b in zip(body, _keystream(len(body), key, nonce)))
     return raw.decode("utf-8")
+
+
+def mode() -> str:
+    return "dpapi" if dpapi_available() else "legacy"
 
 
 def load() -> dict:

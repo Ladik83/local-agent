@@ -1328,6 +1328,21 @@ function renderKB(data) {
   });
 }
 
+async function waitJob(name, timeoutMs) {
+  const deadline = Date.now() + (timeoutMs || 900000);
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch('/api/jobs');
+      const data = await res.json();
+      const job = (data.jobs || {})[name];
+      if (job && job.done) return job.result || {};
+    } catch (error) {
+      return {};
+    }
+    await new Promise(function (resolve) { setTimeout(resolve, 800); });
+  }
+  return { ok: false, error: 'не дождался' };
+}
 async function kbAdd() {
   const input = document.getElementById('kbPath');
   const status = document.getElementById('kbStatus');
@@ -1337,7 +1352,11 @@ async function kbAdd() {
   status.textContent = 'Индексирую… на большой папке это минута';
   if (button) button.disabled = true;
   try {
-    const res = await postJson('/api/rag/add', { path: path });
+    let res = await postJson('/api/rag/add', { path: path });
+    if (res && res.started) {
+      status.textContent = 'Индексирую… это может занять минуту';
+      res = await waitJob('rag_add');
+    }
     status.textContent = res.ok
       ? ('Готово: файлов ' + res.files + ', фрагментов ' + res.chunks)
       : (res.error || 'Не получилось');
