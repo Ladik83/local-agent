@@ -1,6 +1,8 @@
 """Цикл агента: стриминг ответа модели и вызов инструментов."""
 from __future__ import annotations
 
+from . import diag
+
 import json
 import time
 import urllib.error
@@ -165,6 +167,6 @@ def _compact(convo: list, cfg: dict, emit, target: dict) -> list:
     note = {"role": "user", "content": "Кратко о предыдущем: " + (summary or "детали опущены")}
     try:
         emit({"type": "compact", "text": "Контекст сжат, продолжаю"})
-    except Exception:
-        pass
+    except Exception as exc:
+        diag.warn("agent.py:168", exc)
     return [note] + tail

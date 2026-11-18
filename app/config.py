@@ -1,6 +1,8 @@
 """Настройки приложения: простой JSON, без внешних зависимостей."""
 from __future__ import annotations
 
+from . import diag
+
 import json
 import os
 import pathlib
@@ -127,8 +129,8 @@ def load() -> dict:
     try:
         if SETTINGS_PATH.exists():
             cfg.update(json.loads(SETTINGS_PATH.read_text(encoding="utf-8")))
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError) as exc:
+        diag.warn("config.py:130", exc)
     if not cfg.get("models_dir") or not cfg.get("extra_dirs"):
         primary, extras = autodetect_dirs()
         cfg["models_dir"] = cfg.get("models_dir") or primary
@@ -146,6 +148,6 @@ def save(patch: dict | None = None) -> dict:
                 cfg[k] = v
     try:
         SETTINGS_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
-    except OSError:
-        pass
+    except OSError as exc:
+        diag.warn("config.py:149", exc)
     return cfg

@@ -1,6 +1,8 @@
 """Инструменты агента: файлы, команды, поиск в сети, время, калькулятор."""
 from __future__ import annotations
 
+from . import diag
+
 import ast
 import datetime as _dt
 import html as _html
@@ -61,8 +63,8 @@ def schemas(cfg: dict):
         try:
             from . import mcp as mcp_mod
             schemas_out.extend(mcp_mod.tools_for(servers))
-        except Exception:
-            pass
+        except Exception as exc:
+            diag.warn("tools.py:64", exc)
     return schemas_out
 
 
@@ -80,8 +82,8 @@ def _is_denied(path: pathlib.Path) -> bool:
         data_dir = str(config.DATA_DIR).lower().replace("/", "\\")
         if text.startswith(data_dir) and not text.startswith(data_dir + "\\logs"):
             return True
-    except Exception:
-        pass
+    except Exception as exc:
+        diag.warn("tools.py:83", exc)
     return False
 
 
@@ -364,8 +366,8 @@ def approval_gate(name: str, args: dict, cfg: dict, emit) -> bool:
     PENDING.update(event=event, decision=None, tool=name, args=args or {}, id=request_id)
     try:
         emit({"type": "approval", "id": request_id, "tool": name, "args": args or {}})
-    except Exception:
-        pass
+    except Exception as exc:
+        diag.warn("tools.py:367", exc)
     event.wait(timeout=180)
     allowed = bool(PENDING.get("decision"))
     PENDING.update(event=None, decision=None, id="")

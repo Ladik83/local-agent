@@ -103,3 +103,9 @@
 - Обновления: манифест обязан содержать sha256, иначе отказ; хэш сверяется после скачивания; разрешены https и локальный http.
 - keystore переведён на Windows DPAPI (blob с префиксом dpapi:), старые ключи без префикса читаются как раньше.
 - Фоновые задачи: JOBS + _start_job(), GET /api/jobs, у /api/rag/add и /api/model/load флаг background.
+
+**2026-11-18 — чистка и вложения**
+- 41 глухой pass заменён на diag.warn() в logs/app.log; дубли toast/gb в app.js удалены.
+- app/attach.py: текст из txt/md/csv/code/docx/xlsx, pdf через pdftotext если есть, картинки как отметка; лимит 20 МБ, 60к символов.
+- Маршруты POST /api/attach и /api/attach/upload; drag&drop в чате, чипы вложений, текст уходит в сообщение.
+- Вложения читаются без allow-list только из DATA_DIR/attachments, всё остальное через _resolve.

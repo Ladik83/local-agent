@@ -1,6 +1,8 @@
 """История чатов: простые JSON-файлы в папке данных (без базы)."""
 from __future__ import annotations
 
+from . import diag
+
 import json
 import pathlib
 import time
@@ -50,8 +52,8 @@ def save(chat_id: str, messages: list, title: str = "") -> dict:
     }
     try:
         _path(cid).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    except OSError:
-        pass
+    except OSError as exc:
+        diag.warn("chats.py:53", exc)
     return {"id": cid, "title": data["title"]}
 
 
@@ -65,5 +67,5 @@ def load(chat_id: str) -> dict:
 def delete(chat_id: str) -> None:
     try:
         _path(chat_id).unlink()
-    except OSError:
-        pass
+    except OSError as exc:
+        diag.warn("chats.py:68", exc)

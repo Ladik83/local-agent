@@ -1,6 +1,8 @@
 """MCP-клиент: внешние наборы инструментов по протоколу MCP (stdio, JSON-RPC)."""
 from __future__ import annotations
 
+from . import diag
+
 import json
 import subprocess
 import threading
@@ -78,8 +80,8 @@ class Session:
         })
         try:
             self._send("notifications/initialized", None, expect=False)
-        except Exception:
-            pass
+        except Exception as exc:
+            diag.warn("mcp.py:81", exc)
         tools = []
         try:
             listed = self._send("tools/list", {}) or {}
@@ -114,8 +116,8 @@ class Session:
         if self.proc is not None:
             try:
                 self.proc.terminate()
-            except OSError:
-                pass
+            except OSError as exc:
+                diag.warn("mcp.py:117", exc)
             self.proc = None
         self.tools = []
 

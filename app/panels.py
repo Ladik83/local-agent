@@ -1,6 +1,8 @@
 """Сводка для панелей UI: железо, нагрузка, модель, активность, токены. Только stdlib."""
 from __future__ import annotations
 
+from . import diag
+
 import copy
 import ctypes
 import pathlib
@@ -111,8 +113,8 @@ def _fill_computer(out: dict, total: float, free: float) -> None:
         info = hardware.cpu() or {}
         out["cpu"] = str(info.get("name") or "")
         out["cores"] = int(info.get("cores") or 0)
-    except Exception:
-        pass
+    except Exception as exc:
+        diag.warn("panels.py:114", exc)
     if total > 0:
         out["ram_total_gb"] = round(total, 1)
         out["ram_free_gb"] = round(free, 1)
@@ -162,8 +164,8 @@ def _fill_model(out: dict) -> None:
         loaded = bool(proc is not None and proc.poll() is None)
         path = str(engine.SERVER.get("model") or "")
         port = int(engine.SERVER.get("port") or 0)
-    except Exception:
-        pass
+    except Exception as exc:
+        diag.warn("panels.py:165", exc)
     if not path:
         path = str(cfg.get("last_model") or "")
     out["loaded"] = loaded
@@ -224,8 +226,8 @@ def snapshot() -> dict:
     ):
         try:
             fill(*args)
-        except Exception:
-            pass
+        except Exception as exc:
+            diag.warn("panels.py:227", exc)
 
     _CACHE["value"] = data
     _CACHE["ts"] = now

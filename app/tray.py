@@ -10,6 +10,8 @@
 """
 from __future__ import annotations
 
+from . import diag
+
 import ctypes
 import math
 import os
@@ -80,13 +82,13 @@ def _log(text: str) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(str(path), "a", encoding="utf-8") as fh:
             fh.write(line)
-    except Exception:
-        pass
+    except Exception as exc:
+        diag.warn("tray.py:83", exc)
     if _DEBUG:
         try:
             sys.stderr.write("[tray] " + text + "\n")
-        except Exception:
-            pass
+        except Exception as exc:
+            diag.warn("tray.py:88", exc)
 
 
 class Stub:
@@ -119,8 +121,8 @@ def _default_exit() -> None:
     try:
         sys.stdout.flush()
         sys.stderr.flush()
-    except Exception:
-        pass
+    except Exception as exc:
+        diag.warn("tray.py:122", exc)
     os._exit(0)
 
 
@@ -474,20 +476,20 @@ class TrayIcon:
             if self._own_icon and self._hicon:
                 try:
                     self.api.u.DestroyIcon(self._hicon)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    diag.warn("tray.py:477", exc)
                 self._hicon = 0
             if hwnd:
                 try:
                     self.api.u.DestroyWindow(hwnd)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    diag.warn("tray.py:483", exc)
                 self._hwnd = 0
             if self._cls and self._hinst:
                 try:
                     self.api.u.UnregisterClassW(self._cls, self._hinst)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    diag.warn("tray.py:489", exc)
             self.ready.set()
             _log("поток трея завершён, ok=%s" % (self.ok,))
 

@@ -1,6 +1,8 @@
 """Движок llama.cpp: сборки, загрузка, распаковка, запуск сервера модели."""
 from __future__ import annotations
 
+from . import diag
+
 import ctypes
 import ctypes.wintypes
 import json
@@ -41,8 +43,8 @@ def builds(force: bool = False):
             cached = json.loads(CACHE.read_text(encoding="utf-8"))
             if time.time() - cached.get("ts", 0) < 6 * 3600:
                 return cached["builds"]
-        except (OSError, ValueError, KeyError):
-            pass
+        except (OSError, ValueError, KeyError) as exc:
+            diag.warn("engine.py:44", exc)
     out = []
     for rel in _json(GH):
         tag = rel.get("tag_name") or ""
@@ -60,8 +62,8 @@ def builds(force: bool = False):
     if out:
         try:
             CACHE.write_text(json.dumps({"ts": time.time(), "builds": out}), encoding="utf-8")
-        except OSError:
-            pass
+        except OSError as exc:
+            diag.warn("engine.py:63", exc)
     return out
 
 
@@ -117,8 +119,8 @@ def install(tag: str, variant: str = "cpu") -> dict:
             shutil.rmtree(str(staging), ignore_errors=True)
             try:
                 zip_path.unlink()
-            except OSError:
-                pass
+            except OSError as exc:
+                diag.warn("engine.py:120", exc)
             config.save({"engine_tag": tag, "engine_variant": variant})
             JOB.update(active=False, pct=100.0, text="llama.cpp %s готов" % tag, result=str(target))
             return {"ok": True, "path": str(target), "tag": tag}
@@ -212,8 +214,8 @@ def stop() -> None:
         except (OSError, subprocess.TimeoutExpired):
             try:
                 proc.kill()
-            except OSError:
-                pass
+            except OSError as exc:
+                diag.warn("engine.py:215", exc)
     SERVER.update({"proc": None, "port": None, "model": None, "started": 0.0})
 
 
@@ -232,8 +234,8 @@ def _healthy(port: int, timeout: float) -> bool:
             with urllib.request.urlopen(url, timeout=3) as resp:
                 if resp.status == 200:
                     return True
-        except Exception:
-            pass
+        except Exception as exc:
+            diag.warn("engine.py:235", exc)
         proc = SERVER.get("proc")
         if proc is not None and proc.poll() is not None:
             return False

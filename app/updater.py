@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from . import diag
+
 import json
 import os
 import re
@@ -51,8 +53,8 @@ def _log(message: str) -> None:
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         with open(LOGS_DIR / "updater.log", "a", encoding="utf-8") as fh:
             fh.write("%s  %s\n" % (stamp, message))
-    except OSError:
-        pass
+    except OSError as exc:
+        diag.warn("updater.py:54", exc)
 
 
 def _safe_name(value: str) -> str:
@@ -299,8 +301,8 @@ def _swap_in(new_app: Path) -> None:
         if spare.exists():
             try:
                 os.remove(spare)
-            except OSError:
-                pass
+            except OSError as exc:
+                diag.warn("updater.py:302", exc)
 
     moved = False
     try:
@@ -313,8 +315,8 @@ def _swap_in(new_app: Path) -> None:
         if moved and not APP_DIR.exists() and spare.exists():
             try:
                 os.rename(str(spare), str(APP_DIR))
-            except OSError:
-                pass
+            except OSError as exc:
+                diag.warn("updater.py:316", exc)
         raise
 
     if spare.exists():
@@ -342,8 +344,8 @@ def _clear_pending() -> None:
     try:
         if PENDING_FILE.exists():
             PENDING_FILE.unlink()
-    except OSError:
-        pass
+    except OSError as exc:
+        diag.warn("updater.py:345", exc)
 
 
 def pending_info():

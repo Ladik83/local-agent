@@ -1,6 +1,8 @@
 """Keystore: API keys are stored encrypted on disk."""
 from __future__ import annotations
 
+from . import diag
+
 import base64
 import ctypes
 import hashlib
@@ -59,8 +61,8 @@ def _salt() -> bytes:
         raw = os.urandom(16)
         try:
             SALT.write_bytes(raw)
-        except OSError:
-            pass
+        except OSError as exc:
+            diag.warn("keystore.py:62", exc)
         return raw
 
 
@@ -84,8 +86,8 @@ def protect(text: str) -> str:
     if dpapi_available():
         try:
             return PREFIX + base64.b64encode(_dpapi(raw)).decode("ascii")
-        except Exception:
-            pass
+        except Exception as exc:
+            diag.warn("keystore.py:87", exc)
     key = _key()
     nonce = os.urandom(12)
     body = bytes(a ^ b for a, b in zip(raw, _keystream(len(raw), key, nonce)))
@@ -120,8 +122,8 @@ def load() -> dict:
 def save(data: dict) -> None:
     try:
         STORE.write_text(json.dumps(data), encoding="utf-8")
-    except OSError:
-        pass
+    except OSError as exc:
+        diag.warn("keystore.py:123", exc)
 
 
 def put(name: str, value: str) -> None:

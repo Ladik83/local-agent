@@ -61,7 +61,6 @@ function tip(text) {
   return '<span class="help" data-tip="' + esc(text) + '">?</span>';
 }
 
-function gb(v) { return (Math.round(v * 10) / 10) + ' ГБ'; }
 
 function renderHardware() {
   const hw = STATE.hardware, pick = STATE.pick;
@@ -194,14 +193,6 @@ function md(text) {
   }).join('');
 }
 
-function toast(text) {
-  const el = document.getElementById('toast');
-  el.textContent = text;
-  el.classList.add('show');
-  clearTimeout(el._timer);
-  el._timer = setTimeout(function () { el.classList.remove('show'); }, 3200);
-}
-
 async function cancelGeneration() {
   await postJson('/api/chat/cancel', {});
   toast('Останавливаю…');
@@ -209,6 +200,55 @@ async function cancelGeneration() {
   if (stop) stop.style.display = 'none';
 }
 
+const ATTACH = [];
+
+function renderAttach() {
+  const bar = document.getElementById('attachBar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  ATTACH.forEach(function (item, index) {
+    const chip = document.createElement('span');
+    chip.className = 'attachChip';
+    chip.textContent = item.name + ' · ' + Math.round(item.chars / 100) / 10 + 'k';
+    const drop = document.createElement('button');
+    drop.textContent = '×';
+    drop.onclick = function () { ATTACH.splice(index, 1); renderAttach(); };
+    chip.appendChild(drop);
+    bar.appendChild(chip);
+  });
+}
+
+async function attachFile(file) {
+  const hint = document.getElementById('dropHint');
+  if (hint) hint.textContent = 'Читаю ' + file.name + '…';
+  const buffer = await file.arrayBuffer();
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  const data = btoa(binary);
+  const res = await postJson('/api/attach/upload', { name: file.name, data: data });
+  if (hint) hint.textContent = 'Перетащите файл сюда: PDF, DOCX, XLSX, CSV, текст';
+  if (!res || !res.ok) { toast('Файл не прочитан: ' + ((res && res.error) || 'ошибка')); return; }
+  ATTACH.push({ name: res.name, text: res.text || '', chars: res.chars || 0 });
+  renderAttach();
+  toast('Прикреплено: ' + res.name);
+}
+
+function wireDrop() {
+  const view = document.getElementById('view-chat');
+  if (!view) return;
+  ['dragenter', 'dragover'].forEach(function (name) {
+    view.addEventListener(name, function (event) { event.preventDefault(); view.classList.add('dragging'); });
+  });
+  ['dragleave', 'drop'].forEach(function (name) {
+    view.addEventListener(name, function (event) { event.preventDefault(); view.classList.remove('dragging'); });
+  });
+  view.addEventListener('drop', function (event) {
+    const files = event.dataTransfer ? event.dataTransfer.files : null;
+    if (!files || !files.length) return;
+    attachFile(files[0]);
+  });
+}
 async function send() {
   const input = document.getElementById('input');
   const text = input.value.trim();
@@ -218,8 +258,15 @@ async function send() {
   const stopBtn = document.getElementById('stopBtn');
   if (stopBtn) stopBtn.style.display = '';
   input.value = '';
+  let fullText = text;
+  if (ATTACH.length) {
+    const parts = ATTACH.map(function (item) { return 'Файл ' + item.name + ':\n' + item.text; });
+    fullText = parts.join('\n\n') + (text ? '\n\n' + text : '');
+    ATTACH.length = 0;
+    renderAttach();
+  }
   addMsg('user', text);
-  HISTORY.push({ role: 'user', content: text });
+  HISTORY.push({ role: 'user', content: fullText });
   let bubble = addMsg('bot', '');
   bubble.innerHTML = '<span class="typing">думаю…</span>';
   let answer = '';

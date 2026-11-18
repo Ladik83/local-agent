@@ -1,6 +1,8 @@
 """Веб-сервер приложения: состояние, модели, движок, чат."""
 from __future__ import annotations
 
+from . import diag
+
 import json
 import mimetypes
 import os
@@ -12,7 +14,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import agent, autostart, catalog, chats, config, drives, engine, hardware, keystore, mcp, orchestrator, panels, providers, rag, roles, scan, stats, tools, updater, voice
+from . import agent, attach, autostart, catalog, chats, config, drives, engine, hardware, keystore, mcp, orchestrator, panels, providers, rag, roles, scan, stats, tools, updater, voice
 
 UI_DIR = pathlib.Path(__file__).parent / "ui"
 TOKEN_FILE = config.DATA_DIR / "access.token"
@@ -21,14 +23,14 @@ def _load_token() -> str:
         token = TOKEN_FILE.read_text(encoding="utf-8").strip()
         if len(token) >= 24:
             return token
-    except OSError:
-        pass
+    except OSError as exc:
+        diag.warn("main.py:24", exc)
     import secrets as _secrets
     token = _secrets.token_hex(24)
     try:
         TOKEN_FILE.write_text(token, encoding="utf-8")
-    except OSError:
-        pass
+    except OSError as exc:
+        diag.warn("main.py:30", exc)
     return token
 
 
@@ -256,8 +258,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 with open(str(config.LOGS_DIR / "errors.log"), "a", encoding="utf-8") as fh:
                     fh.write(traceback.format_exc() + chr(10) + "---" + chr(10))
-            except OSError:
-                pass
+            except OSError as exc:
+                diag.warn("main.py:259", exc)
             self._send({"error": "Внутренняя ошибка: %s" % exc}, 500)
 
     def _body(self) -> dict:
@@ -393,6 +395,12 @@ class Handler(BaseHTTPRequestHandler):
             elif route == "/api/autostart":
                 want = bool(data.get("enabled"))
                 self._send(autostart.set_enabled(want))
+            elif route == "/api/attach":
+                self._send(attach.extract(str(data.get("path") or "")))
+            elif route == "/api/attach/upload":
+                self._send(attach.save_upload(str(data.get("name") or "file.txt"),
+                                              str(data.get("data") or "")))
+
             elif route == "/api/rag/add":
                 folder = str(data.get("path") or "")
                 if data.get("background", True):
@@ -436,8 +444,8 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     try:
                         pathlib.Path(handle.name).unlink()
-                    except OSError:
-                        pass
+                    except OSError as exc:
+                        diag.warn("main.py:439", exc)
             elif route == "/api/voice/say":
                 voice.say(str(data.get("text") or ""))
                 self._send({"ok": True})
@@ -569,8 +577,8 @@ def run(port: int = 7867, open_browser: bool = True):
     try:
         if updater.has_pending():
             updater.apply_pending()
-    except Exception:
-        pass
+    except Exception as exc:
+        diag.warn("main.py:572", exc)
     url = "http://" + HOST + ":%d/" % port
     if _alive(port):
         print("Приложение уже запущено: " + url, flush=True)
@@ -596,14 +604,14 @@ def run(port: int = 7867, open_browser: bool = True):
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
     try:
         httpd.serve_forever()
-    except KeyboardInterrupt:
-        pass
+    except KeyboardInterrupt as exc:
+        diag.warn("main.py:599", exc)
     finally:
         if icon is not None:
             try:
                 icon.stop()
-            except Exception:
-                pass
+            except Exception as exc:
+                diag.warn("main.py:605", exc)
         engine.stop()
 
 

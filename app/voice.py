@@ -1,6 +1,8 @@
 """Голос: локальное распознавание речи (whisper.cpp) и озвучка (Windows SAPI)."""
 from __future__ import annotations
 
+from . import diag
+
 import pathlib
 import re
 import struct
@@ -200,8 +202,8 @@ def say(text: str) -> None:
     try:
         subprocess.Popen(["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
                          creationflags=NO_WINDOW)
-    except OSError:
-        pass
+    except OSError as exc:
+        diag.warn("voice.py:203", exc)
 
 
 def make_test_wav(path: str) -> bool:

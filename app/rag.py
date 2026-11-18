@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from . import diag
+
 import json
 import math
 import os
@@ -73,8 +75,8 @@ def _conn() -> sqlite3.Connection:
             if have:
                 conn.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild')")
                 conn.commit()
-    except sqlite3.Error:
-        pass
+    except sqlite3.Error as exc:
+        diag.warn("rag.py:76", exc)
     return conn
 
 
@@ -215,8 +217,8 @@ def add_path(raw_path: str, emit=None) -> dict:
         if emit is not None:
             try:
                 emit({"type": "rag", "text": "Проиндексировано: %s" % path.name, "done": indexed, "total": len(files)})
-            except Exception:
-                pass
+            except Exception as exc:
+                diag.warn("rag.py:218", exc)
     conn.commit()
     conn.close()
     return {"ok": True, "files": indexed, "chunks": total_chunks, "skipped": skipped, "found": len(files)}
