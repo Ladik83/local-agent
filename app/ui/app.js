@@ -1407,93 +1407,425 @@ async function runTask(id) {
   await postJson('/api/schedule/run', { id: id });
   toast('Задача запущена, результат будет в чатах');
 }
+/* база знаний: три колонки */
+var kbDocs = [];
+var kbStats = { count: 0, chunks: 0, size: 0 };
+var kbFolder = '';
+var kbOpenDirs = {};
+var kbSelected = null;
+var kbHits = [];
+var kbMode = 'files';
+var kbQueryText = '';
+var kbFilterText = '';
+var kbTextCache = {};
+var kbSeq = 0;
+
+function kbFmtSize(bytes) {
+  var n = Number(bytes) || 0;
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + ' МБ';
+  if (n >= 1024) return Math.round(n / 1024) + ' КБ';
+  return n + ' Б';
+}
+
+function kbBaseName(path) {
+  var parts = String(path || '').split(/[\\/]/);
+  return parts[parts.length - 1] || '';
+}
+
+function kbDirName(path) {
+  var parts = String(path || '').split(/[\\/]/);
+  parts.pop();
+  return parts.join('\\');
+}
+
+function kbExt(path) {
+  var name = kbBaseName(path);
+  var dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : 'файл';
+}
+
+function kbFmtDate(value) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ''));
+  return m ? (m[3] + '.' + m[2] + '.' + m[1].slice(2)) : '—';
+}
+
+function kbSegments(path) {
+  return String(path || '').split(/[\\/]+/).filter(function (part) { return part.length > 0; });
+}
+
+function kbCommonBase(docs) {
+  var first = kbSegments(kbDirName(docs[0].path));
+  var keep = first.length;
+  for (var i = 1; i < docs.length; i++) {
+    var seg = kbSegments(kbDirName(docs[i].path));
+    var j = 0;
+    while (j < keep && j < seg.length && seg[j].toLowerCase() === first[j].toLowerCase()) j++;
+    keep = j;
+  }
+  return first.slice(0, keep);
+}
+
+function kbTree() {
+  var docs = kbDocs.slice().sort(function (a, b) { return String(a.path).toLowerCase() < String(b.path).toLowerCase() ? -1 : 1; });
+  var base = docs.length ? kbCommonBase(docs) : [];
+  var root = { path: base.join('\\'), name: base.length ? base[base.length - 1] : '/', children: {}, count: 0, chunks: 0 };
+  docs.forEach(function (doc) {
+    var rel = kbSegments(doc.path).slice(base.length);
+    var node = root;
+    node.count += 1;
+    node.chunks += Number(doc.chunks) || 0;
+    for (var i = 0; i < rel.length - 1; i++) {
+      if (!node.children[rel[i]]) {
+        node.children[rel[i]] = { path: node.path ? node.path + '\\' + rel[i] : rel[i], name: rel[i], children: {}, count: 0, chunks: 0 };
+      }
+      node = node.children[rel[i]];
+      node.count += 1;
+      node.chunks += Number(doc.chunks) || 0;
+    }
+  });
+  return root;
+}
+
 async function loadKB() {
-  const res = await fetch('/api/rag');
-  const data = await res.json();
-  renderKB(data);
+  var box = document.getElementById('kbFolders');
+  if (!box) return;
+  try {
+    var res = await fetch('/api/rag');
+    var data = await res.json();
+    kbDocs = Array.isArray(data.docs) ? data.docs : (data.items || []);
+    kbStats = { count: data.count || kbDocs.length, chunks: data.chunks || 0, size: data.size_mb || 0 };
+    if (kbSelected && kbSelected.hitIndex === undefined) {
+      var fresh = null;
+      for (var i = 0; i < kbDocs.length; i++) { if (kbDocs[i].path === kbSelected.path) { fresh = kbDocs[i]; break; } }
+      kbSelected = fresh;
+    }
+    kbRenderAll();
+  } catch (error) {
+    box.innerHTML = '<div class="kbEmpty">Не удалось прочитать базу.</div>';
+  }
 }
 
-function shortPath(path) {
-  const parts = String(path || '').split(/[\\/]/);
-  return parts.slice(-2).join('/');
+function kbRenderAll() {
+  var stat = document.getElementById('kbStat');
+  if (stat) {
+    stat.textContent = 'Файлов: ' + (kbStats.count || kbDocs.length) + ' · фрагментов: ' + (kbStats.chunks || 0) + ' · ' + (kbStats.size || 0) + ' МБ';
+  }
+  kbRenderFolders();
+  kbRenderList();
+  kbRenderPreview();
 }
 
-function renderKB(data) {
-  const stat = document.getElementById('kbStat');
-  if (stat) stat.textContent = 'Источников: ' + (data.count || (data.docs || []).length || 0) + ' · фрагментов: ' + (data.chunks || 0) + ' · ' + (data.size_mb || 0) + ' МБ';
-  const list = document.getElementById('kbList');
-  if (!list) return;
-  const items = data.items || [];
-  if (!items.length) {
-    list.innerHTML = '<div class="sub">Пока пусто. Добавьте папку выше — и агент сможет искать по ней.</div>';
+function kbRenderFolders() {
+  var box = document.getElementById('kbFolders');
+  if (!box) return;
+  if (!kbDocs.length) {
+    box.innerHTML = '<div class="kbEmpty">Пока пусто. Добавьте папку или файл выше.</div>';
     return;
   }
-  list.innerHTML = items.map(function (item) {
-    return '<div class="row"><span title="' + esc(item.path) + '">' + esc(shortPath(item.path)) + '</span>' +
-      '<span class="sub">' + (item.chunks || 0) + ' фрагм.</span>' +
-      '<button class="ghost" data-del="' + esc(item.path) + '">Убрать</button></div>';
+  var rows = [{ path: '', name: 'Все файлы', count: kbStats.count || kbDocs.length, chunks: kbStats.chunks || 0, depth: 0, kids: false, open: false }];
+  (function walk(node, depth) {
+    Object.keys(node.children).sort(function (a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : 1; }).forEach(function (key) {
+      var child = node.children[key];
+      var kids = Object.keys(child.children).length > 0;
+      var open = Object.prototype.hasOwnProperty.call(kbOpenDirs, child.path) ? !!kbOpenDirs[child.path] : depth < 1;
+      rows.push({ path: child.path, name: child.name, count: child.count, chunks: child.chunks, depth: depth, kids: kids, open: open });
+      if (kids && open) walk(child, depth + 1);
+    });
+  })(kbTree(), 0);
+  box.innerHTML = rows.map(function (row) {
+    var pad = 6 + row.depth * 12;
+    return '<div class="kbNode' + (kbFolder === row.path ? ' sel' : '') + '" data-kbdir="' + esc(row.path) + '" data-kbdepth="' + row.depth + '" data-kbkids="' + (row.kids ? '1' : '0') + '" style="padding-left:' + pad + 'px">' +
+      '<span class="kbCar">' + (row.kids ? (row.open ? '▾' : '▸') : '·') + '</span>' +
+      '<span class="kbNodeName" title="' + esc(row.path || row.name) + '">' + esc(row.name) + '</span>' +
+      '<span class="kbCount" title="файлов / фрагментов">' + row.count + '/' + row.chunks + '</span></div>';
   }).join('');
-  Array.from(list.querySelectorAll('[data-del]')).forEach(function (button) {
-    button.onclick = async function () {
-      await postJson('/api/rag/remove', { path: button.getAttribute('data-del') });
-      loadKB();
+  Array.prototype.forEach.call(box.querySelectorAll('[data-kbdir]'), function (el) {
+    el.onclick = function () {
+      var path = el.getAttribute('data-kbdir');
+      var depth = Number(el.getAttribute('data-kbdepth')) || 0;
+      if (el.getAttribute('data-kbkids') === '1') {
+        var wasOpen = Object.prototype.hasOwnProperty.call(kbOpenDirs, path) ? !!kbOpenDirs[path] : depth < 1;
+        kbOpenDirs[path] = !wasOpen;
+      }
+      kbFolder = path;
+      kbMode = 'files';
+      kbQueryText = '';
+      var queryField = document.getElementById('kbQuery');
+      if (queryField) queryField.value = '';
+      kbRenderFolders();
+      kbRenderList();
     };
   });
 }
 
+function kbDocsIn(path) {
+  if (!path) return kbDocs.slice();
+  var prefix = (String(path) + '\\').toLowerCase();
+  return kbDocs.filter(function (doc) { return String(doc.path).toLowerCase().indexOf(prefix) === 0; });
+}
+
+function kbShortPath(path) {
+  var parts = String(path || '').split(/[\\/]/);
+  return parts.slice(-2).join('/');
+}
+
+function kbMark(text, query) {
+  var raw = String(text === null || text === undefined ? '' : text);
+  var terms = String(query || '').split(/\s+/).filter(function (term) { return term.length > 1; });
+  if (!terms.length) return esc(raw);
+  var pattern = new RegExp('(' + terms.map(function (term) { return term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|') + ')', 'gi');
+  return raw.split(pattern).map(function (part, index) {
+    if (index % 2 === 1) return '<mark>' + esc(part) + '</mark>';
+    return esc(part);
+  }).join('');
+}
+
+function kbRenderList() {
+  var box = document.getElementById('kbList');
+  var title = document.getElementById('kbListTitle');
+  if (!box) return;
+  var filterRow = document.querySelector('.kbFilterRow');
+  if (filterRow) filterRow.style.display = kbMode === 'search' ? 'none' : '';
+  if (kbMode === 'search') {
+    if (title) title.textContent = 'Результаты';
+    if (!kbHits.length) { box.innerHTML = '<div class="kbEmpty">Ничего не нашлось.</div>'; return; }
+    box.innerHTML = kbHits.map(function (hit, index) {
+      var on = kbSelected && kbSelected.hitIndex === index ? ' sel' : '';
+      return '<div class="kbHit' + on + '" data-kbhit="' + index + '">' +
+        '<div class="kbHitTop"><span class="kbHitPath" title="' + esc(hit.path) + '">' + esc(kbShortPath(hit.path)) + '</span>' +
+        '<span class="kbScore">' + (Number(hit.score) || 0).toFixed(2) + '</span></div>' +
+        '<div class="kbHitText">' + kbMark(String(hit.text || '').slice(0, 220), kbQueryText) + '</div></div>';
+    }).join('');
+    Array.prototype.forEach.call(box.querySelectorAll('[data-kbhit]'), function (el) {
+      el.onclick = function () { kbSelectHit(Number(el.getAttribute('data-kbhit'))); };
+    });
+    return;
+  }
+  if (title) title.textContent = 'Файлы';
+  var docs = kbDocsIn(kbFolder);
+  var needle = String(kbFilterText || '').trim().toLowerCase();
+  if (needle) {
+    docs = docs.filter(function (doc) { return kbBaseName(doc.path).toLowerCase().indexOf(needle) >= 0; });
+  }
+  if (!docs.length) {
+    box.innerHTML = '<div class="kbEmpty">' + (needle ? 'Ничего не нашлось.' : 'В этой папке пусто.') + '</div>';
+    return;
+  }
+  box.innerHTML = docs.map(function (doc) {
+    var on = kbSelected && kbSelected.hitIndex === undefined && kbSelected.path === doc.path ? ' sel' : '';
+    return '<div class="kbFile' + on + '" data-kbpath="' + esc(doc.path) + '">' +
+      '<div class="kbFileMain"><span class="kbFileName" title="' + esc(doc.path) + '">' + esc(kbBaseName(doc.path)) + '</span>' +
+      '<span class="kbTag">' + esc(kbExt(doc.path)) + '</span></div>' +
+      '<div class="kbFileMeta">' + (Number(doc.chunks) || 0) + ' фрагм. · ' + kbFmtSize(doc.size) + ' · ' + kbFmtDate(doc.added) + '</div>' +
+      '<button class="kbX" data-kbdel="' + esc(doc.path) + '" title="Убрать из базы">✕</button></div>';
+  }).join('');
+  Array.prototype.forEach.call(box.querySelectorAll('[data-kbpath]'), function (el) {
+    el.onclick = function () { kbSelectDoc(el.getAttribute('data-kbpath')); };
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-kbdel]'), function (el) {
+    el.onclick = function (event) {
+      event.stopPropagation();
+      kbRemove(el.getAttribute('data-kbdel'));
+    };
+  });
+}
+
+function kbSelectDoc(path) {
+  var found = null;
+  for (var i = 0; i < kbDocs.length; i++) { if (kbDocs[i].path === path) { found = kbDocs[i]; break; } }
+  kbSelected = found ? { path: found.path, chunks: found.chunks, size: found.size, added: found.added } : null;
+  kbRenderList();
+  kbRenderPreview();
+}
+
+function kbSelectHit(index) {
+  var hit = kbHits[index];
+  if (!hit) return;
+  var meta = null;
+  for (var i = 0; i < kbDocs.length; i++) { if (kbDocs[i].path === hit.path) { meta = kbDocs[i]; break; } }
+  kbSelected = {
+    path: hit.path,
+    chunks: meta ? meta.chunks : 0,
+    size: meta ? meta.size : 0,
+    added: meta ? meta.added : '',
+    hit: hit,
+    hitIndex: index
+  };
+  kbRenderList();
+  kbRenderPreview();
+}
+
+function kbRenderPreview() {
+  var box = document.getElementById('kbPreview');
+  if (!box) return;
+  if (!kbSelected) {
+    box.innerHTML = '<div class="kbEmpty">Выберите файл — покажу начало текста.</div>';
+    return;
+  }
+  var sel = kbSelected;
+  var meta = [kbFmtSize(sel.size), (Number(sel.chunks) || 0) + ' фрагм.'];
+  if (sel.added) meta.push(kbFmtDate(sel.added));
+  var html = '<div class="kbPrev">' +
+    '<div class="kbPrevName">' + esc(kbBaseName(sel.path)) + '</div>' +
+    '<div class="kbPrevPath">' + esc(sel.path) + '</div>' +
+    '<div class="kbPrevMeta"><span>' + esc(meta.join(' · ')) + '</span>' +
+    '<button class="ghost tiny" id="kbOpenBtn">Открыть в системе</button></div>';
+  if (sel.hit) {
+    html += '<div class="kbPrevMeta"><span class="kbSrc">Фрагмент · ' + esc(kbShortPath(sel.path)) + '</span>' +
+      '<span class="kbScore">' + (Number(sel.hit.score) || 0).toFixed(2) + '</span></div>' +
+      '<div class="kbSnippet">' + kbMark(sel.hit.text, kbQueryText) + '</div>';
+  }
+  html += '<div class="kbPrevMeta" id="kbBadgeRow"></div>' +
+    '<pre class="kbText" id="kbTextBox">Загрузка…</pre></div>';
+  box.innerHTML = html;
+  var button = document.getElementById('kbOpenBtn');
+  if (button) button.onclick = function () { kbOpen(sel.path); };
+  kbLoadText(sel);
+}
+
+async function kbLoadText(sel) {
+  var seq = ++kbSeq;
+  var text = kbTextCache[sel.path];
+  if (text === undefined) {
+    try {
+      var res = await postJson('/api/attach', { path: sel.path });
+      text = res && res.ok ? String(res.text || '') : '';
+    } catch (error) {
+      text = '';
+    }
+    if (text) kbTextCache[sel.path] = text;
+  }
+  if (seq !== kbSeq) return;
+  var pre = document.getElementById('kbTextBox');
+  if (!pre) return;
+  if (!text) {
+    pre.textContent = sel.hit ? 'Фрагмент выше. Текст не прочитан.' : 'Текст не прочитан.';
+    return;
+  }
+  var limit = 1500;
+  pre.innerHTML = kbMark(text.slice(0, limit), kbQueryText);
+  var row = document.getElementById('kbBadgeRow');
+  if (row && text.length > limit) {
+    row.innerHTML = '<span class="kbBadge">обрезано</span><span>' + text.length + ' симв., показано ' + limit + '</span>';
+  }
+}
+
+async function kbRemove(path) {
+  await postJson('/api/rag/remove', { path: path });
+  delete kbTextCache[path];
+  if (kbSelected && kbSelected.path === path) kbSelected = null;
+  toast('Убрано из базы');
+  await loadKB();
+}
+
+async function kbOpen(path) {
+  try {
+    var res = await postJson('/api/open', { path: path });
+    if (res && res.ok === false) toast('Не уда|лось от|крыть');
+  } catch (error) {
+    toast('Не уда|лось от|крыть');
+  }
+}
+
 async function waitJob(name, timeoutMs) {
-  const deadline = Date.now() + (timeoutMs || 900000);
+  var deadline = Date.now() + (timeoutMs || 600000);
   while (Date.now() < deadline) {
     try {
-      const res = await fetch('/api/jobs');
-      const data = await res.json();
-      const job = (data.jobs || {})[name];
+      var res = await fetch('/api/jobs');
+      var data = await res.json();
+      var job = (data.jobs || {})[name];
       if (job && job.done) return job.result || {};
     } catch (error) {
-      return {};
+      return { ok: false, error: 'Нет ответа' };
     }
     await new Promise(function (resolve) { setTimeout(resolve, 800); });
   }
-  return { ok: false, error: 'не дождался' };
+  return { ok: false, error: 'Не дождался' };
 }
+
 async function kbAdd() {
-  const input = document.getElementById('kbPath');
-  const status = document.getElementById('kbStatus');
-  const button = document.getElementById('kbAdd');
-  const path = (input.value || '').trim();
-  if (!path) { toast('Укажите папку или файл'); return; }
-  status.textContent = 'Индексирую… на большой папке это минута';
+  var input = document.getElementById('kbPath');
+  var status = document.getElementById('kbStatus');
+  var button = document.getElementById('kbAdd');
+  var path = ((input && input.value) || '').trim();
+  if (!path) { toast('Пу|ть не у|казан'); return; }
+  if (status) status.textContent = 'Ин|дексирую…';
   if (button) button.disabled = true;
   try {
-    let res = await postJson('/api/rag/add', { path: path });
+    var res = await postJson('/api/rag/add', { path: path });
     if (res && res.started) {
-      status.textContent = 'Индексирую… это может занять минуту';
+      if (status) status.textContent = 'Ин|дексирую… э|то мо|жет зан|ять мин|уту';
       res = await waitJob('rag_add');
     }
-    status.textContent = res.ok
-      ? ('Готово: файлов ' + res.files + ', фрагментов ' + res.chunks)
-      : (res.error || 'Не получилось');
-    if (res.ok) { input.value = ''; loadKB(); }
+    if (res && res.ok) {
+      if (status) status.textContent = 'Го|тово: фа|йлов ' + (res.files || 0) + ', фрагментов ' + (res.chunks || 0);
+      if (input) input.value = '';
+      await loadKB();
+    } else if (status) {
+      status.textContent = (res && res.error) || 'Не пол|училось';
+    }
+  } catch (error) {
+    if (status) status.textContent = 'Ош|ибка: ' + String(error && error.message || error);
   } finally {
     if (button) button.disabled = false;
   }
 }
 
-async function kbSearch() {
-  const input = document.getElementById('kbQuery');
-  const box = document.getElementById('kbHits');
-  const query = (input.value || '').trim();
-  if (!box) return;
-  if (!query) { box.innerHTML = ''; return; }
-  box.innerHTML = '<div class="sub">Ищу…</div>';
-  const res = await fetch('/api/rag/search?q=' + encodeURIComponent(query) + '&limit=6');
-  const data = await res.json();
-  const items = data.items || [];
-  if (!items.length) { box.innerHTML = '<div class="sub">Ничего не нашлось.</div>'; return; }
-  box.innerHTML = items.map(function (hit) {
-    return '<div class="kbHit"><div class="sub">' + esc(shortPath(hit.path)) + ' · ' + hit.score + '</div>' +
-      '<div>' + esc(String(hit.text || '').slice(0, 320)) + '</div></div>';
-  }).join('');
+async function kbSearch(clear) {
+  var input = document.getElementById('kbQuery');
+  var query = clear ? '' : String((input && input.value) || '').trim();
+  if (query.length < 2) {
+    kbMode = 'files';
+    kbHits = [];
+    kbQueryText = '';
+    kbRenderList();
+    return;
+  }
+  kbQueryText = query;
+  var box = document.getElementById('kbList');
+  if (box) box.innerHTML = '<div class="kbEmpty">Ищу…</div>';
+  try {
+    var res = await fetch('/api/rag/search?q=' + encodeURIComponent(query) + '&limit=40');
+    var data = await res.json();
+    kbHits = Array.isArray(data.items) ? data.items : [];
+  } catch (error) {
+    kbHits = [];
+  }
+  kbMode = 'search';
+  kbSelected = null;
+  try {
+    kbRenderList();
+    kbRenderPreview();
+  } catch (error) {
+    var fallback = document.getElementById('kbList');
+    if (fallback) fallback.textContent = String(error && error.message || error);
+  }
+}
+
+async function kbAdd() {
+  var input = document.getElementById('kbPath');
+  var status = document.getElementById('kbStatus');
+  var button = document.getElementById('kbAdd');
+  var path = String((input && input.value) || '').trim();
+  if (!path) { toast('Путь не указан'); return; }
+  if (status) status.textContent = 'Индексирую…';
+  if (button) button.disabled = true;
+  try {
+    var res = await postJson('/api/rag/add', { path: path });
+    if (res && res.started) {
+      if (status) status.textContent = 'Индексирую… это может занять минуту';
+      res = await waitJob('rag_add');
+    }
+    if (res && res.ok) {
+      if (status) status.textContent = 'Готово: файлов ' + (res.files || 0) + ', фрагментов ' + (res.chunks || 0);
+      if (input) input.value = '';
+      await loadKB();
+    } else if (status) {
+      status.textContent = (res && res.error) || 'Не получилось';
+    }
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
 
 document.querySelectorAll('.tab').forEach(function (button) {
@@ -1511,8 +1843,13 @@ document.querySelectorAll('.tab').forEach(function (button) {
 });
 
 document.getElementById('kbAdd') && document.getElementById('kbAdd').addEventListener('click', kbAdd);
+document.getElementById('kbFilter') && document.getElementById('kbFilter').addEventListener('input', function (event) {
+  kbFilterText = event.target.value || '';
+  if (kbMode === 'files') kbRenderList();
+});
 document.getElementById('kbQuery') && document.getElementById('kbQuery').addEventListener('keydown', function (event) {
   if (event.key === 'Enter') { event.preventDefault(); kbSearch(); }
+  if (event.key === 'Escape') { event.target.value = ''; kbSearch(true); }
 });
 document.getElementById('autostart') && document.getElementById('autostart').addEventListener('change', function (event) { toggleAutostart(event.target.checked); });
 loadAutostart();

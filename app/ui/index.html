@@ -86,17 +86,30 @@
  </section>
  <section id="view-kb" class="view">
  <h2>База знаний</h2>
- <p class="sub">Папки и документы, по которым агент ищет ответ с источником. Всё лежит на этом компьютере.</p>
- <div class="panel">
-  <div class="row"><span>Добавить папку или файл</span><input type="text" id="kbPath" class="wide" placeholder="C:\Users\volko\Documents"></div>
-  <div class="row"><span class="sub" id="kbStat"></span><button class="primary" id="kbAdd">Проиндексировать</button></div>
-  <div class="sub" id="kbStatus"></div>
+ <div class="kbAddRow">
+  <input type="text" id="kbPath" class="wide" placeholder="Путь к папке или файлу">
+  <button class="primary" id="kbAdd">Индексировать</button>
+  <span class="sub" id="kbStatus"></span>
  </div>
- <div class="panel">
-  <div class="row"><span>Поиск по базе</span><input type="text" id="kbQuery" class="wide" placeholder="например: договор аренды"></div>
-  <div id="kbHits"></div>
+ <div class="kbBar">
+  <input type="text" id="kbQuery" class="wide" placeholder="Поиск по базе: от 2 символов, Enter">
+  <span class="sub" id="kbStat"></span>
  </div>
- <div class="panel" id="kbList"></div>
+ <div class="kbGrid">
+  <div class="kbCol">
+   <div class="kbColHead">Папки</div>
+   <div class="kbScroll" id="kbFolders"></div>
+  </div>
+  <div class="kbCol">
+   <div class="kbColHead"><span id="kbListTitle">Файлы</span></div>
+   <div class="kbFilterRow"><input type="text" id="kbFilter" placeholder="Фильтр по имени"></div>
+   <div class="kbScroll" id="kbList"></div>
+  </div>
+  <div class="kbCol">
+   <div class="kbColHead">Просмотр</div>
+   <div class="kbScroll" id="kbPreview"></div>
+  </div>
+ </div>
  </section>
 
  <section id="view-agents" class="view">
