@@ -1420,7 +1420,7 @@ function shortPath(path) {
 
 function renderKB(data) {
   const stat = document.getElementById('kbStat');
-  if (stat) stat.textContent = 'Источников: ' + (data.docs || 0) + ' · фрагментов: ' + (data.chunks || 0) + ' · ' + (data.size_mb || 0) + ' МБ';
+  if (stat) stat.textContent = 'Источников: ' + (data.count || (data.docs || []).length || 0) + ' · фрагментов: ' + (data.chunks || 0) + ' · ' + (data.size_mb || 0) + ' МБ';
   const list = document.getElementById('kbList');
   if (!list) return;
   const items = data.items || [];

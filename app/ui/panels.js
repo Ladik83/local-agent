@@ -361,6 +361,15 @@
   }
 
   function renderModel(d) {
+      if (!isObject(d) || !d.name) {
+        var st = state() || {};
+        var eng = st.engine || {};
+        var last = String((st.settings || {}).last_model || '');
+        var sep = String.fromCharCode(92);
+        var shortName = last ? last.split(sep).pop().split('/').pop() : '';
+        d = { name: shortName, path: last, loaded: !!eng.running, port: eng.port || 0,
+              ctx: (st.settings || {}).context || 8192, size_gb: 0 };
+      }
     var box = byId('monModel');
     if (!box) return;
     try {

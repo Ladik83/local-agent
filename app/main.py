@@ -271,6 +271,7 @@ class Handler(BaseHTTPRequestHandler):
             elif route == "/api/rag":
                 payload = dict(rag.stats())
                 payload["docs"] = rag.list_docs()
+                payload["count"] = len(payload["docs"])
                 self._send(payload)
             elif route == "/api/rag/search":
                 query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
