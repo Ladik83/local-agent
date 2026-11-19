@@ -52,17 +52,49 @@
  </section>
 
  <section id="view-models" class="view">
- <h2>Модели на этом компьютере</h2>
- <p class="sub" id="modelsSub"></p>
- <div class="panel">
- <div class="row"><span>Найти модели на всех дисках компьютера</span><button class="ghost" id="discoverBtn">Искать</button></div>
- <div class="progress" id="discProgress" style="display:none"><i></i></div>
- <div class="sub" id="discText"></div>
+ <div class="subtabs">
+  <button class="subtab active" data-models="local">На устройстве</button>
+  <button class="subtab" data-models="online">В сети: Hugging Face</button>
  </div>
- <div id="localModels" class="cards"></div>
- <h2>Скачать модель</h2>
-    <p class="sub">Подбор идёт сам. Смотрите на память и видеокарту.</p>
- <div id="catalog" class="cards"></div>
+
+ <div id="modelsLocal" class="subview active">
+  <h2>Модели на этом компьютере</h2>
+  <p class="sub" id="modelsSub"></p>
+  <div class="panel">
+   <div class="row"><span>Найти модели на всех дисках компьютера</span><button class="ghost" id="discoverBtn">Искать</button></div>
+   <div class="progress" id="discProgress" style="display:none"><i></i></div>
+   <div class="sub" id="discText"></div>
+  </div>
+  <div id="localModels" class="cards"></div>
+  <h2>Скачать модель</h2>
+  <p class="sub">Подбор идёт сам: смотрим на память и видеокарту.</p>
+  <div id="catalog" class="cards"></div>
+ </div>
+
+ <div id="modelsOnline" class="subview">
+  <h2>Поиск моделей на Hugging Face</h2>
+  <p class="sub">Публичный каталог .gguf-файлов. Скачанная модель попадает в папку моделей и сразу появляется в списке «На устройстве».</p>
+  <div class="panel">
+   <div class="row"><span>Что искать</span>
+    <span class="hfRow"><input type="text" id="hfQuery" class="wide" placeholder="nomic-embed, qwen3, gemma-3"><button class="ghost" id="hfSearchBtn">Искать</button></span></div>
+   <div class="row"><span>Готовые запросы</span><span class="chips">
+    <button class="ghost tiny" data-hfq="nomic-embed-text">модель для знаний</button>
+    <button class="ghost tiny" data-hfq="bge-m3 GGUF">bge-m3</button>
+    <button class="ghost tiny" data-hfq="Qwen3-4B-Instruct-2507 GGUF">Qwen3 4B</button>
+    <button class="ghost tiny" data-hfq="gemma-3-4b-it GGUF">Gemma 3 4B</button>
+   </span></div>
+   <div class="sub" id="hfHint">Введите запрос или нажмите готовый.</div>
+  </div>
+  <div id="hfResults" class="cards"></div>
+  <div id="hfFilesPanel" class="panel" style="display:none">
+   <div class="row"><span id="hfFilesTitle">Файлы модели</span><button class="ghost tiny" id="hfFilesClose">Закрыть</button></div>
+   <div id="hfFiles"></div>
+  </div>
+  <div id="hfProgWrap" style="display:none">
+   <div class="progress" id="hfProg"><i></i></div>
+   <div class="sub" id="hfProgText"></div>
+  </div>
+ </div>
  </section>
 
  <section id="view-tasks" class="view">
@@ -94,6 +126,12 @@
  <div class="kbBar">
   <input type="text" id="kbQuery" class="wide" placeholder="Поиск по базе: от 2 символов, Enter">
   <span class="sub" id="kbStat"></span>
+ </div>
+ <div class="panel">
+  <div class="row"><span id="embState">Поиск по смыслу</span><span class="row2">
+   <button class="ghost tiny" id="embCheck">Проверить модель</button>
+   <button class="ghost tiny" id="kbReindex">Пересчитать базу</button></span></div>
+  <div class="sub" id="embHint"></div>
  </div>
  <div class="kbGrid">
   <div class="kbCol">
@@ -151,6 +189,9 @@
  <div class="panel">
  <label class="row"><span>Папка моделей</span><input type="text" id="modelsDir" class="wide"></label>
  <label class="row"><span>Дополнительные папки (через ;)</span><input type="text" id="extraDirs" class="wide" placeholder="D:\Models"></label>
+ <label class="row"><span>Токен Hugging Face (для приватных моделей)</span><input type="text" id="hfToken" class="wide" placeholder="hf_..."></label>
+ <label class="row"><span>Модель для поиска по смыслу (.gguf)</span><input type="text" id="embedModel" class="wide" placeholder="F:\Models\bge-m3.gguf"></label>
+ <label class="row"><span>Проверить и сохранить токен</span><button class="ghost" id="hfTokenSave">Сохранить токен</button></label>
  <label class="row"><span>Контекст, токенов</span>
  <input type="number" id="context" min="512" max="262144" step="512" class="wide" list="ctxPresets">
  <datalist id="ctxPresets">

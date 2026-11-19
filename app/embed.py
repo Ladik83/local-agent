@@ -1,48 +1,107 @@
-"""Эмбеддинги: пробуем llama-server /embeddings, иначе остаёмся на локальном хеше."""
-import json
-import urllib.request
+"""Эмбеддинги: отдельный llama-server с моделью эмбеддингов, запасной вариант — локальный хеш."""
+from __future__ import annotations
 
 from . import config
 from . import diag
-from . import providers
+from . import engine
 
-STATE = {"mode": None}
+import json
+import pathlib
+import time
+import urllib.request
+
+STATE = {"mode": None, "dim": 0, "model": "", "error": None}
+NEEDLES = ("embed", "bge", "minilm")
+SMALL = 8 * 1024 * 1024
+CACHE = {"ts": 0.0, "path": ""}
 
 
-def remote_vectors(texts):
-    """Векторы от сервера моделей или None, если он не умеет эмбеддинги."""
-    target = providers.resolve(config.load())
-    base = str(target.get("base_url") or "").rstrip("/")
+def find_model(cfg=None) -> str:
+    """Путь к модели эмбеддингов: из настроек или первый подходящий файл на диске."""
+    cfg = cfg or config.load()
+    explicit = str(cfg.get("embed_model") or "").strip()
+    if explicit and pathlib.Path(explicit).exists():
+        return explicit
+    now = time.time()
+    cached = CACHE.get("path") or ""
+    if cached and now - CACHE.get("ts", 0.0) < 60 and pathlib.Path(cached).exists():
+        return cached
+    roots = [cfg.get("models_dir")] + list(cfg.get("extra_dirs") or [])
+    for raw in roots:
+        root = pathlib.Path(str(raw or ""))
+        if not root.is_dir():
+            continue
+        try:
+            for item in root.rglob("*.gguf"):
+                name = item.name.lower()
+                if "mmproj" in name:
+                    continue
+                if any(needle in name for needle in NEEDLES) and item.stat().st_size > SMALL:
+                    CACHE.update({"ts": now, "path": str(item)})
+                    return str(item)
+        except OSError as exc:
+            diag.warn("embed/scan", exc)
+    return ""
+
+
+def vectors(texts, kind: str = "document", timeout: int = 120):
+    """Векторы от модели эмбеддингов. None — если модель недоступна."""
+    items = [str(text) for text in texts]
+    if not items:
+        return []
+    path = find_model()
+    if not path:
+        STATE.update(mode="hash", error="model_missing")
+        return None
+    base = engine.embed_base_url()
+    if not base:
+        started = engine.start_embed(path)
+        if not started.get("ok"):
+            STATE.update(mode="hash", error=started.get("error") or "start_failed")
+            return None
+        base = engine.embed_base_url()
     if not base:
         return None
-    url = base + "/embeddings"
-    body = json.dumps({"input": list(texts), "model": target.get("model") or ""}).encode("utf-8")
-    request = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(request, timeout=40) as response:
+    body = json.dumps({"input": items, "model": "local"}).encode("utf-8")
+    request = urllib.request.Request(base + "/v1/embeddings", data=body,
+                                     headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
         data = json.loads(response.read().decode("utf-8", "replace"))
-    items = data.get("data") or []
-    if len(items) != len(texts):
-        return None
-    vectors = []
-    for item in items:
+    out = []
+    for item in data.get("data") or []:
         vector = item.get("embedding") if isinstance(item, dict) else None
         if not vector:
             return None
-        vectors.append([float(value) for value in vector])
-    return vectors
+        out.append([float(value) for value in vector])
+    if len(out) != len(items):
+        return None
+    STATE.update(mode="local", dim=len(out[0]), model=path, error=None)
+    return out
 
 
 def available() -> bool:
-    """Один раз проверяем сервер и запоминаем режим."""
+    """Проверяем модель один раз и запоминаем режим."""
     if STATE["mode"] is None:
         try:
-            probe = remote_vectors(["проверка"])
-            STATE["mode"] = "remote" if probe else "hash"
+            STATE["mode"] = "local" if vectors(["check"]) else "hash"
         except Exception as exc:
             diag.warn("embed/probe", exc)
-            STATE["mode"] = "hash"
-    return STATE["mode"] == "remote"
+            STATE.update(mode="hash", error=str(exc))
+    return STATE["mode"] == "local"
 
 
-def reset():
-    STATE["mode"] = None
+def reset() -> None:
+    STATE.update(mode=None, dim=0, error=None)
+
+
+def status() -> dict:
+    path = find_model()
+    running = bool(engine.embed_base_url())
+    return {
+        "mode": STATE.get("mode") or ("ready" if running else "off"),
+        "dim": STATE.get("dim") or 0,
+        "model": path,
+        "name": pathlib.Path(path).name if path else "",
+        "running": running,
+        "error": STATE.get("error"),
+    }

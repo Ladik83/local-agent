@@ -70,6 +70,10 @@ def _conn() -> sqlite3.Connection:
         """
     )
     try:
+        conn.execute("ALTER TABLE chunks ADD COLUMN vec_kind TEXT DEFAULT ''")
+    except sqlite3.OperationalError as exc:
+        diag.warn("rag.py:alter", exc)
+    try:
         if conn.execute("SELECT count(*) FROM chunks_fts").fetchone()[0] == 0:
             have = conn.execute("SELECT count(*) FROM chunks").fetchone()[0]
             if have:
@@ -85,7 +89,14 @@ def _tokens(text: str) -> list[str]:
     return [word for word in words if word not in STOP]
 
 
-def embed(text: str) -> list[float]:
+def embed(text: str, kind: str = "document"):
+    try:
+        from . import embed as _semantic
+        vectors = _semantic.vectors([text], kind=kind)
+        if vectors and vectors[0]:
+            return [round(float(value), 6) for value in vectors[0]], "sem"
+    except Exception as exc:
+        diag.warn("rag/embed", exc)
     counts: dict[str, int] = {}
     for word in _tokens(text):
         counts[word] = counts.get(word, 0) + 1
@@ -94,7 +105,7 @@ def embed(text: str) -> list[float]:
         index = zlib.crc32(word.encode("utf-8")) % DIM
         vec[index] += 1.0 + 0.5 * math.log(count)
     norm = math.sqrt(sum(value * value for value in vec)) or 1.0
-    return [round(value / norm, 5) for value in vec]
+    return [round(value / norm, 5) for value in vec], "hash"
 
 
 def _split(text: str) -> list[str]:
@@ -158,6 +169,11 @@ def _collect(target: pathlib.Path) -> list[pathlib.Path]:
     return found
 
 
+def _chunk_row(doc_id: int, order: int, part: str):
+    vec, kind = embed(part)
+    return (doc_id, order, part, json.dumps(vec), kind)
+
+
 def add_path(raw_path: str, emit=None) -> dict:
     """Индексируем файл или папку. Возвращает {ok, files, chunks, skipped}."""
     try:
@@ -209,8 +225,8 @@ def add_path(raw_path: str, emit=None) -> dict:
             )
             doc_id = cursor.lastrowid
         conn.executemany(
-            "INSERT INTO chunks (doc_id, ord, text, vec) VALUES (?, ?, ?, ?)",
-            [(doc_id, order, part, json.dumps(embed(part))) for order, part in enumerate(parts)],
+            "INSERT INTO chunks (doc_id, ord, text, vec, vec_kind) VALUES (?, ?, ?, ?, ?)",
+            [_chunk_row(doc_id, order, part) for order, part in enumerate(parts)],
         )
         indexed += 1
         total_chunks += len(parts)
@@ -250,8 +266,12 @@ def search(query: str, limit: int = 5) -> list[dict]:
         except sqlite3.Error:
             out = []
     if not out:
-        vector = embed(needle)
-        rows = conn.execute("SELECT c.text, c.vec, d.path FROM chunks c JOIN docs d ON d.id = c.doc_id").fetchall()
+        vector, vec_kind = embed(needle, kind="query")
+        rows = conn.execute(
+            "SELECT c.text, c.vec, d.path FROM chunks c JOIN docs d ON d.id = c.doc_id"
+            " WHERE COALESCE(c.vec_kind, '') = ?",
+            (vec_kind,),
+        ).fetchall()
         scored = []
         for text, vec_json, path in rows:
             try:
@@ -303,6 +323,19 @@ def clear() -> dict:
         conn.commit()
         conn.close()
     return {"ok": True}
+
+
+def reindex(emit=None) -> dict:
+    paths = [item["path"] for item in list_docs()]
+    files = 0
+    chunks = 0
+    for path in paths:
+        remove_doc(path)
+        result = add_path(path, emit)
+        if result.get("ok"):
+            files += int(result.get("files") or 0)
+            chunks += int(result.get("chunks") or 0)
+    return {"ok": True, "docs": len(paths), "files": files, "chunks": chunks}
 
 
 def stats() -> dict:

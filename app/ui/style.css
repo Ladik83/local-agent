@@ -407,3 +407,17 @@ body.hugeFont { font-size: 19px; }
   .kbGrid { grid-template-columns: 1fr; }
   .kbScroll { max-height: 42vh; }
 }
+
+.subtabs { display: flex; gap: 6px; margin: 2px 0 4px; }
+.subtab {
+  font: inherit; font-size: 13.5px; cursor: pointer;
+  padding: 7px 14px; border-radius: 10px;
+  background: transparent; color: var(--muted); border: 1px solid var(--line);
+}
+.subtab:hover { color: var(--text); background: var(--panel2); }
+.subtab.active { color: var(--text); background: var(--panel2); border-color: var(--accent); }
+.subview { display: none; flex-direction: column; }
+.subview.active { display: flex; }
+.hfRow { display: flex; gap: 8px; align-items: center; }
+.hfRow input { min-width: 260px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }

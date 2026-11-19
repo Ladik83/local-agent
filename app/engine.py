@@ -306,6 +306,76 @@ def memory_mb(proc) -> int:
         return 0
 
 
+EMBED = {"proc": None, "port": None, "model": None, "error": None, "started": 0.0}
+
+
+def embed_stop() -> None:
+    proc = EMBED.get("proc")
+    if proc is not None and proc.poll() is None:
+        try:
+            proc.terminate()
+            proc.wait(timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            try:
+                proc.kill()
+            except OSError as exc:
+                diag.warn("engine.py:embed_kill", exc)
+    EMBED.update({"proc": None, "port": None, "model": None})
+
+
+def embed_base_url():
+    proc = EMBED.get("proc")
+    if EMBED.get("port") and proc is not None and proc.poll() is None:
+        return "http://127.0.0.1:%d" % EMBED["port"]
+    return None
+
+
+def _wait_embed(port: int, timeout: float) -> bool:
+    end = time.time() + timeout
+    url = "http://127.0.0.1:%d/health" % port
+    while time.time() < end:
+        try:
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception as exc:
+            diag.warn("engine.py:embed_health", exc)
+        proc = EMBED.get("proc")
+        if proc is not None and proc.poll() is not None:
+            return False
+        time.sleep(0.6)
+    return False
+
+
+def start_embed(model_path: str) -> dict:
+    path = str(model_path or "")
+    if not path or not pathlib.Path(path).exists():
+        return {"ok": False, "error": "Модель эмбеддингов не найдена — скачайте её на вкладке «Модели»"}
+    if EMBED.get("model") == path and embed_base_url():
+        return {"ok": True, "port": EMBED["port"], "reused": True}
+    exe = find_exe()
+    if not exe:
+        return {"ok": False, "error": "движок llama.cpp не установлен"}
+    embed_stop()
+    port = free_port(8190)
+    log_path = config.LOGS_DIR / "llama-embed.log"
+    cmd = [exe, "-m", path, "--host", "127.0.0.1", "--port", str(port),
+           "-c", "2048", "-ngl", "99", "--no-warmup", "--embeddings", "--pooling", "mean"]
+    handle = open(str(log_path), "w", encoding="utf-8", errors="replace")
+    try:
+        proc = subprocess.Popen(cmd, stdout=handle, stderr=subprocess.STDOUT,
+                                cwd=str(pathlib.Path(path).parent), creationflags=NO_WINDOW)
+    except OSError as exc:
+        return {"ok": False, "error": str(exc)}
+    EMBED.update({"proc": proc, "port": port, "model": path, "error": None, "started": time.time()})
+    if _wait_embed(port, 120):
+        return {"ok": True, "port": port, "log": str(log_path)}
+    EMBED["error"] = "модель эмбеддингов не запустилась"
+    log = tail(log_path)
+    embed_stop()
+    return {"ok": False, "error": "llama-server не поднялся", "log": log}
+
+
 def base_url():
     proc = SERVER.get("proc")
     if SERVER.get("port") and proc is not None and proc.poll() is None:

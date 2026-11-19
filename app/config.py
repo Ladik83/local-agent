@@ -103,7 +103,8 @@ DEFAULTS: dict = {
     "roles": [],                 # правки ролей поверх стандартных
     "engine_tag": None,          # например b12421
     "engine_variant": None,      # vulkan | cpu
-    "last_model": None,          # абсолютный путь к .gguf
+    "last_model": None,
+    "embed_model": None,          # абсолютный путь к .gguf
     "context": 8192,             # размер контекста
     "ngl": 99,                   # слоёв на GPU
     "temperature": 0.7,

@@ -14,7 +14,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import agent, attach, autostart, catalog, chats as chats_mod, schedule, chats, config, drives, engine, hardware, keystore, mcp, orchestrator, panels, providers, rag, roles, scan, stats, tools, updater, voice
+from . import agent, attach, autostart, catalog, chats as chats_mod, hf, schedule, chats, config, drives, embed, engine, hardware, keystore, mcp, orchestrator, panels, providers, rag, roles, scan, stats, tools, updater, voice
 
 UI_DIR = pathlib.Path(__file__).parent / "ui"
 TOKEN_FILE = config.DATA_DIR / "access.token"
@@ -96,6 +96,8 @@ def state() -> dict:
         "models": local,
         "pick": pick,
         "catalog": [dict(c, url=catalog.url(c)) for c in catalog.CATALOG],
+        "hf": {"token_set": bool(keystore.get("hf_token"))},
+        "embeddings": embed.status(),
         "download": dict(DL),
         "server": {"running": bool(engine.base_url()), "port": engine.SERVER.get("port"),
                    "model": engine.SERVER.get("model")},
@@ -141,6 +143,56 @@ def start_download(entry_id: str) -> dict:
         return {"ok": False, "error": "загрузка уже идёт"}
     threading.Thread(target=_fetch_model, args=(entry,), daemon=True).start()
     return {"ok": True, "file": entry["file"]}
+
+
+def _fetch_hf(repo: str, file: str) -> None:
+    """Загрузка выбранного файла с Hugging Face в папку моделей."""
+    name = pathlib.Path(file).name
+    DL.update(active=True, name=name, pct=0.0, text="Скачиваем " + name, error=None, done=None)
+
+    def progress(done: int, total: int) -> None:
+        if total:
+            DL["pct"] = round(done * 100.0 / total, 1)
+            DL["text"] = "%s: %.2f из %.2f ГБ" % (name, done / 1024 ** 3, total / 1024 ** 3)
+        else:
+            DL["pct"] = 0.0
+            DL["text"] = "%s: %.0f МБ" % (name, done / 1048576.0)
+
+    try:
+        result = hf.download(repo, file, progress)
+        if result.get("ok"):
+            DL.update(active=False, pct=100.0, text="Модель скачана", done=result.get("path"))
+            config.save({"last_model": result.get("path")})
+        else:
+            DL.update(active=False, error=result.get("error") or "ошибка", text="Ошибка загрузки")
+    except Exception as exc:
+        DL.update(active=False, error=str(exc), text="Ошибка загрузки")
+
+
+def start_hf_download(repo: str, file: str) -> dict:
+    if not repo or not file:
+        return {"ok": False, "error": "не указана модель"}
+    if not hf.REPO_RE.match(repo):
+        return {"ok": False, "error": "некорректное имя модели"}
+    if not str(file).lower().endswith(".gguf"):
+        return {"ok": False, "error": "можно скачивать только .gguf"}
+    if DL.get("active"):
+        return {"ok": False, "error": "загрузка уже идёт"}
+    threading.Thread(target=_fetch_hf, args=(repo, file), daemon=True).start()
+    return {"ok": True, "repo": repo, "file": file}
+
+
+def _embeddings_check() -> dict:
+    path = embed.find_model()
+    if not path:
+        return {"ok": False, "error": "Модель эмбеддингов не найдена — скачайте её на вкладке «Модели»"}
+    started = engine.start_embed(path)
+    if not started.get("ok"):
+        return {"ok": False, "error": started.get("error") or "модель эмбеддингов не запустилась"}
+    probe = embed.vectors(["probe"], kind="query")
+    if not probe:
+        return {"ok": False, "error": "модель эмбеддингов не запустилась"}
+    return {"ok": True, "dim": len(probe[0]), "model": path}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -239,6 +291,29 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({"servers": servers, "tools": found, "catalog": MCP_CATALOG})
             elif route == "/api/voice":
                 self._send(voice.status())
+            elif route == "/api/hf/search":
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                asked = (query.get("q") or [""])[0].strip()
+                if not asked:
+                    self._send({"ok": True, "q": "", "items": []})
+                else:
+                    try:
+                        self._send({"ok": True, "q": asked, "items": hf.search(asked, 24)})
+                    except Exception as exc:
+                        diag.warn("hf/search", exc)
+                        self._send({"ok": False, "error": str(exc), "items": []})
+            elif route == "/api/hf/files":
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                repo = (query.get("repo") or [""])[0]
+                if not hf.REPO_RE.match(repo):
+                    probe = start_hf_download(repo, "x.gguf")
+                    self._send({"ok": False, "error": probe.get("error") or "bad name", "files": []})
+                else:
+                    try:
+                        self._send({"ok": True, "repo": repo, "files": hf.files(repo)})
+                    except Exception as exc:
+                        diag.warn("hf/files", exc)
+                        self._send({"ok": False, "error": str(exc), "files": []})
             elif route == "/api/stats":
                 self._send(stats.snapshot())
             elif route == "/api/chats":
@@ -388,6 +463,15 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({"ok": True})
             elif route == "/api/model/download":
                 self._send(start_download(data.get("id", "")))
+            elif route == "/api/embeddings/check":
+                self._send(_embeddings_check())
+            elif route == "/api/rag/reindex":
+                self._send(_start_job("rag_reindex", lambda: rag.reindex()))
+            elif route == "/api/hf/download":
+                self._send(start_hf_download(str(data.get("repo") or ""), str(data.get("file") or "")))
+            elif route == "/api/hf/token":
+                hf.set_token(str(data.get("token") or ""))
+                self._send({"ok": True, "token_set": bool(keystore.get("hf_token"))})
             elif route == "/api/provider":
                 current = config.load().get("provider") or {}
                 merged = {
@@ -514,7 +598,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._send({"ok": False, "error": str(exc)})
                     return
                 if not target.exists():
-                    self._send({"ok": False, "error": "[PERSON_NAME] не найден: %s" % target})
+                    self._send({"ok": False, "error": "не найден: %s" % target})
                     return
                 try:
                     os.startfile(str(target))
@@ -719,6 +803,10 @@ def run(port: int = 7867, open_browser: bool = True):
             except Exception as exc:
                 diag.warn("main.py:605", exc)
         engine.stop()
+        try:
+            engine.embed_stop()
+        except Exception as exc:
+            diag.warn("main.py:embed_stop", exc)
 
 
 if __name__ == "__main__":

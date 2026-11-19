@@ -444,7 +444,8 @@ async function saveSettings() {
     models_dir: document.getElementById('modelsDir').value.trim(),
     extra_dirs: document.getElementById('extraDirs').value.split(';').map(function (t) { return t.trim(); }).filter(Boolean),
     approval_mode: (document.getElementById('approvalMode') || {}).value || 'ask',
-    context: parseInt(document.getElementById('context').value, 10) || 8192
+    context: parseInt(document.getElementById('context').value, 10) || 8192,
+    embed_model: ((document.getElementById('embedModel') || {}).value || '').trim()
   };
   await fetch('/api/settings', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch)
@@ -459,6 +460,7 @@ function poll() {
     const job = await (await fetch('/api/job')).json();
     const busyEngine = job.engine && job.engine.active;
     const busyModel = job.download && job.download.active;
+    updateHfProgress(job.download);
     if (busyModel && job.download.text) toast(job.download.text);
     if (busyEngine && job.engine.text) toast(job.engine.text);
     if (!busyEngine && !busyModel) {
@@ -1100,6 +1102,9 @@ function render() {
   }
   renderLocalModels();
   renderCatalog();
+  renderHfState();
+  renderEmbeddings();
+  updateHfProgress(STATE.download);
   renderSettings();
   renderProvider();
   renderRoles();
@@ -1916,12 +1921,219 @@ inputBox.addEventListener('input', function () {
   inputBox.style.height = Math.min(inputBox.scrollHeight, 200) + 'px';
 });
 
+const HF = { q: '', items: [], repo: '', files: [] };
+
+function modelsTab(name) {
+  document.querySelectorAll('.subtab').forEach(function (b) {
+    b.classList.toggle('active', b.dataset.models === name);
+  });
+  const local = document.getElementById('modelsLocal');
+  const online = document.getElementById('modelsOnline');
+  if (local) local.classList.toggle('active', name === 'local');
+  if (online) online.classList.toggle('active', name === 'online');
+  try { localStorage.setItem('agentModelsTab', name); } catch (error) { return; }
+}
+
+function fmtCount(value) {
+  const n = Number(value) || 0;
+  if (n >= 1000000) return (Math.round(n / 100000) / 10) + ' млн';
+  if (n >= 1000) return (Math.round(n / 100) / 10) + ' тыс.';
+  return String(n);
+}
+
+async function hfSearch(query) {
+  const field = document.getElementById('hfQuery');
+  const q = String(query || (field ? field.value : '') || '').trim();
+  const box = document.getElementById('hfResults');
+  const hint = document.getElementById('hfHint');
+  if (!q) { toast('Введите название модели'); return; }
+  if (field) field.value = q;
+  HF.q = q;
+  if (box) box.innerHTML = '<div class="sub">Ищу на Hugging Face…</div>';
+  try {
+    const data = await api('/api/hf/search?q=' + encodeURIComponent(q));
+    HF.items = data.items || [];
+    if (hint) hint.textContent = data.ok ? ('Найдено моделей: ' + HF.items.length) : ('Не получилось: ' + (data.error || 'ошибка'));
+    renderHfResults();
+  } catch (err) {
+    if (box) box.innerHTML = '';
+    if (hint) hint.textContent = 'Нет связи с Hugging Face: ' + err.message;
+  }
+}
+
+function renderHfResults() {
+  const box = document.getElementById('hfResults');
+  if (!box) return;
+  if (!HF.items.length) { box.innerHTML = '<div class="sub">Ничего не нашлось. Попробуйте другое слово.</div>'; return; }
+  box.innerHTML = HF.items.map(function (it) {
+    const tags = (it.tags || []).slice(0, 5).join(', ');
+    return '<div class="card"><div class="title">' + esc(it.repo) + '</div>' +
+      '<div class="meta">' + fmtCount(it.downloads) + ' скачиваний, ' + (it.likes || 0) + ' отметок нравится' + (it.license ? ', лицензия ' + esc(it.license) : '') + '</div>' +
+      '<div class="meta">' + esc(tags) + '</div>' +
+      '<div class="meta">обновлено ' + esc(it.updated || '') + '</div>' +
+      '<div class="row2"><button class="ghost" data-hfrepo="' + esc(it.repo) + '">Показать файлы</button></div></div>';
+  }).join('');
+}
+
+function hfSize(f) {
+  const bytes = Number(f.bytes) || 0;
+  if (bytes && bytes < 100 * 1024 * 1024) return Math.max(1, Math.round(bytes / 1048576)) + ' МБ';
+  return gb(f.size_gb);
+}
+
+async function hfFiles(repo) {
+  HF.repo = repo;
+  HF.files = [];
+  const panel = document.getElementById('hfFilesPanel');
+  const list = document.getElementById('hfFiles');
+  const title = document.getElementById('hfFilesTitle');
+  if (!panel || !list) return;
+  panel.style.display = 'block';
+  if (title) title.textContent = repo;
+  list.innerHTML = '<div class="sub">Смотрю файлы…</div>';
+  try {
+    const data = await api('/api/hf/files?repo=' + encodeURIComponent(repo));
+    if (!data.ok) { list.innerHTML = '<div class="sub">' + esc(data.error || 'ошибка') + '</div>'; return; }
+    HF.files = data.files || [];
+    if (!HF.files.length) { list.innerHTML = '<div class="sub">В этой модели нет .gguf-файлов.</div>'; return; }
+    list.innerHTML = '<table class="roles"><thead><tr><th>Файл</th><th>Размер</th><th>Квант</th><th></th></tr></thead><tbody>' +
+      HF.files.map(function (f) {
+        return '<tr><td>' + esc(f.file) + '</td><td>' + hfSize(f) + '</td><td>' + esc(f.quant || '') + '</td>' +
+          '<td><button class="ghost tiny" data-hfdl="' + esc(f.file) + '">Скачать</button></td></tr>';
+      }).join('') + '</tbody></table>';
+  } catch (err) {
+    list.innerHTML = '<div class="sub">Ошибка: ' + esc(err.message) + '</div>';
+  }
+}
+
+async function hfDownload(file) {
+  if (!HF.repo) { toast('Сначала выберите модель'); return; }
+  try {
+    const data = await api('/api/hf/download', { repo: HF.repo, file: file });
+    if (!data.ok) { toast(data.error || 'ошибка'); return; }
+    toast('Качаю ' + file);
+    updateHfProgress({ active: true, pct: 0, text: 'Начинаю загрузку' });
+    poll();
+  } catch (err) {
+    toast('Ошибка: ' + err.message);
+  }
+}
+
+function updateHfProgress(dl) {
+  const wrap = document.getElementById('hfProgWrap');
+  if (!wrap) return;
+  if (!dl) { wrap.style.display = 'none'; return; }
+  const text = document.getElementById('hfProgText');
+  const bar = document.getElementById('hfProg');
+  const started = dl.active || (dl.pct || 0) > 0 || dl.done || dl.error;
+  wrap.style.display = started ? 'block' : 'none';
+  if (!started) return;
+  if (bar && bar.firstElementChild) bar.firstElementChild.style.width = Math.max(2, dl.pct || 0) + '%';
+  if (text) text.textContent = dl.error ? ('Ошибка: ' + dl.error) : (dl.text || '');
+}
+
+async function saveHfToken() {
+  const field = document.getElementById('hfToken');
+  const token = field ? field.value.trim() : '';
+  if (!token) { toast('Вставьте токен из настроек Hugging Face'); return; }
+  try {
+    const data = await api('/api/hf/token', { token: token });
+    if (field) field.value = '';
+    toast(data.token_set ? 'Токен сохранён' : 'Пустой токен');
+    await loadState();
+  } catch (err) {
+    toast('Ошибка: ' + err.message);
+  }
+}
+
+function renderHfState() {
+  const field = document.getElementById('hfToken');
+  if (!field) return;
+  const state = (STATE || {}).hf || {};
+  field.placeholder = state.token_set ? 'токен сохранён, можно заменить' : 'hf_...';
+}
+
+function renderEmbeddings() {
+  const info = (STATE || {}).embeddings || {};
+  const state = document.getElementById('embState');
+  const hint = document.getElementById('embHint');
+  const field = document.getElementById('embedModel');
+  if (field && document.activeElement !== field) field.value = info.model || '';
+  if (state) {
+    let text = 'Поиск по смыслу: выключен, ищем по словам';
+    if (info.running) text = 'Поиск по смыслу: модель работает';
+    else if (info.model) text = 'Поиск по смыслу: файл найден, нажмите «Проверить модель»';
+    state.textContent = text;
+  }
+  if (hint) {
+    hint.textContent = info.model
+      ? (info.name + (info.dim ? ' · вектор из ' + info.dim + ' чисел' : ''))
+      : 'Модели нет. Скачайте на вкладке «Модели», подойдёт bge-m3 или embeddinggemma.';
+  }
+}
+
+async function checkEmbeddings() {
+  toast('Проверяю модель, первый запуск может занять до минуты');
+  try {
+    const data = await api('/api/embeddings/check', {});
+    toast(data.ok ? ('Работает, вектор из ' + data.dim + ' чисел') : (data.error || 'ошибка'));
+    await loadState();
+  } catch (err) {
+    toast('Ошибка: ' + err.message);
+  }
+}
+
+async function reindexKB() {
+  try {
+    const data = await api('/api/rag/reindex', {});
+    toast(data.ok ? 'Пересчёт пошёл, это займёт время' : (data.error || 'ошибка'));
+    setTimeout(loadKB, 5000);
+  } catch (err) {
+    toast('Ошибка: ' + err.message);
+  }
+}
+
+function wireEmbeddings() {
+  const check = document.getElementById('embCheck');
+  if (check) check.addEventListener('click', checkEmbeddings);
+  const again = document.getElementById('kbReindex');
+  if (again) again.addEventListener('click', reindexKB);
+}
+
+function wireModels() {
+  document.querySelectorAll('.subtab').forEach(function (b) {
+    b.addEventListener('click', function () { modelsTab(b.dataset.models); });
+  });
+  const btn = document.getElementById('hfSearchBtn');
+  if (btn) btn.addEventListener('click', function () { hfSearch(); });
+  const field = document.getElementById('hfQuery');
+  if (field) field.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') { event.preventDefault(); hfSearch(); }
+  });
+  const close = document.getElementById('hfFilesClose');
+  if (close) close.addEventListener('click', function () { document.getElementById('hfFilesPanel').style.display = 'none'; });
+  const tokenBtn = document.getElementById('hfTokenSave');
+  if (tokenBtn) tokenBtn.addEventListener('click', saveHfToken);
+  document.addEventListener('click', function (event) {
+    const el = event.target;
+    if (!el || !el.dataset) return;
+    if (el.dataset.hfq) hfSearch(el.dataset.hfq);
+    else if (el.dataset.hfrepo) hfFiles(el.dataset.hfrepo);
+    else if (el.dataset.hfdl) hfDownload(el.dataset.hfdl);
+  });
+  let saved = 'local';
+  try { saved = localStorage.getItem('agentModelsTab') || 'local'; } catch (error) { saved = 'local'; }
+  modelsTab(saved);
+}
+
 function bootStep(name, fn) {
   try { fn(); } catch (error) { console.error('boot:' + name, error); }
 }
 bootStep('resizers', wireResizers);
 bootStep('gear', wireGear);
 bootStep('autostart', loadAutostart);
+bootStep('hf', wireModels);
+bootStep('embeddings', wireEmbeddings);
 loadState().catch(function (err) { toast('Не удалось получить состояние: ' + err.message); });
 pollStats();
 setInterval(pollStats, 1500);
