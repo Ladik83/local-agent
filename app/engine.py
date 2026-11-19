@@ -259,7 +259,7 @@ def start(model_path: str, ctx=None, ngl=None) -> dict:
     ngl = int(ngl if ngl is not None else (cfg.get("ngl") or 99))
     log_path = config.LOGS_DIR / "llama-server.log"
     cmd = [exe, "-m", model_path, "--host", "127.0.0.1", "--port", str(port),
-           "-c", str(ctx), "-ngl", str(ngl), "--no-warmup"]
+           "-c", str(ctx), "-ngl", str(ngl), "--no-warmup", "--embeddings"]
     last_log = ""
     for extra in (["--jinja"], []):
         handle = open(str(log_path), "w", encoding="utf-8", errors="replace")

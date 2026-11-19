@@ -250,6 +250,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({"engine": dict(engine.JOB), "download": dict(DL), "discover": dict(DISC)})
             elif route == "/api/panels":
                 self._send(panels.snapshot())
+            elif route == "/api/telegram":
+                tg_token = keystore.get("telegram_bot")
+                info = {"token_set": bool(tg_token), "chat": str(config.load().get("telegram_chat") or "")}
+                if tg_token:
+                    try:
+                        import json as _json
+                        import urllib.request as _url
+                        with _url.urlopen("https://api.telegram.org/bot" + tg_token + "/getMe", timeout=10) as _resp:
+                            info["bot"] = (_json.loads(_resp.read().decode("utf-8")).get("result") or {}).get("username") or ""
+                    except Exception as exc:
+                        diag.warn("telegram/getMe", exc)
+                self._send(info)
             elif route == "/api/lan":
                 cfg_now = config.load()
                 port_now = self.server.server_port
@@ -433,6 +445,13 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     threading.Thread(target=_run_scheduled, args=(wanted,), daemon=True).start()
                     self._send({"ok": True, "started": True})
+            elif route == "/api/telegram":
+                new_token = str(data.get("token") or "").strip()
+                if new_token:
+                    keystore.put("telegram_bot", new_token)
+                if data.get("chat") is not None:
+                    config.save({"telegram_chat": str(data.get("chat") or "")})
+                self._send({"ok": True})
             elif route == "/api/attach":
                 self._send(attach.extract(str(data.get("path") or "")))
             elif route == "/api/attach/upload":

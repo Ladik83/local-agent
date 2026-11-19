@@ -1341,6 +1341,26 @@ async function toggleAutostart(enabled) {
   else toast('Не вышло: ' + ((res && res.detail) || 'нет ответа'));
 }
 
+async function loadTelegram() {
+  const state = document.getElementById('tgState');
+  if (!state) return;
+  const res = await fetch('/api/telegram');
+  const data = await res.json();
+  state.textContent = data.token_set
+    ? ('подключён' + (data.bot ? ': @' + data.bot : '') + (data.chat ? ', чат ' + data.chat : ''))
+    : 'бот не подключён';
+  const chat = document.getElementById('tgChat');
+  if (chat && data.chat) chat.value = data.chat;
+}
+
+async function saveTelegram() {
+  const token = document.getElementById('tgToken');
+  const chat = document.getElementById('tgChat');
+  await postJson('/api/telegram', { token: (token.value || '').trim(), chat: (chat.value || '').trim() });
+  if (token) token.value = '';
+  toast('Сохранено, проверяю бота');
+  loadTelegram();
+}
 async function loadLan() {
   const box = document.getElementById('lanAccess');
   const hint = document.getElementById('lanHint');
@@ -1838,7 +1858,7 @@ document.querySelectorAll('.tab').forEach(function (button) {
     target.scrollTop = 0;
     if (button.dataset.tab === 'kb') loadKB();
     if (button.dataset.tab === 'tasks') loadTasks();
-    if (button.dataset.tab === 'settings') loadLan();
+    if (button.dataset.tab === 'settings') { loadLan(); loadTelegram(); }
   });
 });
 
