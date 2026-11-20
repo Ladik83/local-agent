@@ -307,6 +307,30 @@ def memory_mb(proc) -> int:
 
 
 EMBED = {"proc": None, "port": None, "model": None, "error": None, "started": 0.0}
+EMBED_PID = config.DATA_DIR / "embed.pid"
+
+
+def _embed_pid_write(pid) -> None:
+    try:
+        EMBED_PID.write_text(str(pid), encoding="utf-8")
+    except OSError as exc:
+        diag.warn("engine.py:embed_pid", exc)
+
+
+def embed_cleanup() -> None:
+    """Гасим сервер эмбеддингов, оставшийся от прошлого запуска."""
+    try:
+        pid = int(EMBED_PID.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return
+    try:
+        os.kill(pid, 9)
+    except OSError as exc:
+        diag.warn("engine.py:embed_cleanup", exc)
+    try:
+        EMBED_PID.unlink()
+    except OSError as exc:
+        diag.warn("engine.py:embed_pid_del", exc)
 
 
 def embed_stop() -> None:
@@ -321,6 +345,10 @@ def embed_stop() -> None:
             except OSError as exc:
                 diag.warn("engine.py:embed_kill", exc)
     EMBED.update({"proc": None, "port": None, "model": None})
+    try:
+        EMBED_PID.unlink()
+    except OSError:
+        pass
 
 
 def embed_base_url():
@@ -368,6 +396,7 @@ def start_embed(model_path: str) -> dict:
     except OSError as exc:
         return {"ok": False, "error": str(exc)}
     EMBED.update({"proc": proc, "port": port, "model": path, "error": None, "started": time.time()})
+    _embed_pid_write(proc.pid)
     if _wait_embed(port, 120):
         return {"ok": True, "port": port, "log": str(log_path)}
     EMBED["error"] = "модель эмбеддингов не запустилась"

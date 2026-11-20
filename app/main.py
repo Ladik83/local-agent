@@ -769,6 +769,10 @@ def run(port: int = 7867, open_browser: bool = True):
             updater.apply_pending()
     except Exception as exc:
         diag.warn("main.py:572", exc)
+    try:
+        engine.embed_cleanup()
+    except Exception as exc:
+        diag.warn("main.py:embed_cleanup", exc)
     url = "http://" + HOST + ":%d/" % port
     if _alive(port):
         print("Приложение уже запущено: " + url, flush=True)
