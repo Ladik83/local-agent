@@ -14,6 +14,18 @@ STATE = {"mode": None, "dim": 0, "model": "", "error": None}
 NEEDLES = ("embed", "bge", "minilm")
 SMALL = 8 * 1024 * 1024
 CACHE = {"ts": 0.0, "path": ""}
+PREFIX = {
+    "nomic": ("search_document: ", "search_query: "),
+    "e5": ("passage: ", "query: "),
+}
+
+
+def _prefix(path: str, kind: str) -> str:
+    name = pathlib.Path(path).name.lower()
+    for key, pair in PREFIX.items():
+        if key in name:
+            return pair[1] if kind == "query" else pair[0]
+    return ""
 
 
 def find_model(cfg=None) -> str:
@@ -62,7 +74,9 @@ def vectors(texts, kind: str = "document", timeout: int = 120):
         base = engine.embed_base_url()
     if not base:
         return None
-    body = json.dumps({"input": items, "model": "local"}).encode("utf-8")
+    prefix = _prefix(path, kind)
+    payload = [prefix + text for text in items] if prefix else items
+    body = json.dumps({"input": payload, "model": "local"}).encode("utf-8")
     request = urllib.request.Request(base + "/v1/embeddings", data=body,
                                      headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(request, timeout=timeout) as response:

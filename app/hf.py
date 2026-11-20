@@ -29,7 +29,8 @@ def token() -> str:
 def set_token(value: str) -> dict:
     value = (value or "").strip()
     if not value:
-        return {"ok": False, "error": "пустой токен"}
+        keystore.drop("hf_token")
+        return {"ok": True, "token_set": False}
     keystore.put("hf_token", value)
     return {"ok": True, "token_set": True}
 

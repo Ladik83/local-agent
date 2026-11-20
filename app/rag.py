@@ -89,14 +89,7 @@ def _tokens(text: str) -> list[str]:
     return [word for word in words if word not in STOP]
 
 
-def embed(text: str, kind: str = "document"):
-    try:
-        from . import embed as _semantic
-        vectors = _semantic.vectors([text], kind=kind)
-        if vectors and vectors[0]:
-            return [round(float(value), 6) for value in vectors[0]], "sem"
-    except Exception as exc:
-        diag.warn("rag/embed", exc)
+def _hash_vector(text: str) -> list[float]:
     counts: dict[str, int] = {}
     for word in _tokens(text):
         counts[word] = counts.get(word, 0) + 1
@@ -105,7 +98,18 @@ def embed(text: str, kind: str = "document"):
         index = zlib.crc32(word.encode("utf-8")) % DIM
         vec[index] += 1.0 + 0.5 * math.log(count)
     norm = math.sqrt(sum(value * value for value in vec)) or 1.0
-    return [round(value / norm, 5) for value in vec], "hash"
+    return [round(value / norm, 5) for value in vec]
+
+
+def embed(text: str, kind: str = "document"):
+    try:
+        from . import embed as _semantic
+        vectors = _semantic.vectors([text], kind=kind)
+        if vectors and vectors[0]:
+            return [round(float(value), 6) for value in vectors[0]], "sem"
+    except Exception as exc:
+        diag.warn("rag/embed", exc)
+    return _hash_vector(text), "hash"
 
 
 def _split(text: str) -> list[str]:
@@ -169,11 +173,6 @@ def _collect(target: pathlib.Path) -> list[pathlib.Path]:
     return found
 
 
-def _chunk_row(doc_id: int, order: int, part: str):
-    vec, kind = embed(part)
-    return (doc_id, order, part, json.dumps(vec), kind)
-
-
 def add_path(raw_path: str, emit=None) -> dict:
     """Индексируем файл или папку. Возвращает {ok, files, chunks, skipped}."""
     try:
@@ -224,9 +223,13 @@ def add_path(raw_path: str, emit=None) -> dict:
                 (str(path), mtime, size, len(parts), time.time()),
             )
             doc_id = cursor.lastrowid
+        rows = []
+        for order, part in enumerate(parts):
+            vec, vec_kind = embed(part)
+            rows.append((doc_id, order, part, json.dumps(vec), vec_kind))
         conn.executemany(
             "INSERT INTO chunks (doc_id, ord, text, vec, vec_kind) VALUES (?, ?, ?, ?, ?)",
-            [_chunk_row(doc_id, order, part) for order, part in enumerate(parts)],
+            rows,
         )
         indexed += 1
         total_chunks += len(parts)
@@ -251,41 +254,74 @@ def search(query: str, limit: int = 5) -> list[dict]:
     if not needle or not db_path().exists():
         return []
     conn = _conn()
-    out: list[dict] = []
     phrase = _fts_query(needle)
+    RRF = 60.0
+    found = {}
+
+    def add(chunk_id, text, path, rank, source, cos=None, bm25=None):
+        item = found.get(chunk_id)
+        if item is None:
+            item = {"path": path, "text": text, "rrf": 0.0, "cos": None, "bm25": None, "sources": []}
+            found[chunk_id] = item
+        item["rrf"] += 1.0 / (RRF + rank + 1)
+        if source not in item["sources"]:
+            item["sources"].append(source)
+        if cos is not None:
+            item["cos"] = cos
+        if bm25 is not None:
+            item["bm25"] = bm25
+
     if phrase:
         try:
             rows = conn.execute(
-                "SELECT c.text, d.path, bm25(chunks_fts) AS rank"
+                "SELECT c.id, c.text, d.path, bm25(chunks_fts) AS rank"
                 " FROM chunks_fts JOIN chunks c ON c.id = chunks_fts.rowid"
                 " JOIN docs d ON d.id = c.doc_id"
                 " WHERE chunks_fts MATCH ? ORDER BY rank LIMIT ?",
-                (phrase, limit),
+                (phrase, limit * 4),
             ).fetchall()
-            out = [{"score": round(-float(row[2]), 3), "path": row[1], "text": row[0]} for row in rows]
-        except sqlite3.Error:
-            out = []
-    if not out:
+            for rank, row in enumerate(rows):
+                add(row[0], row[1], row[2], rank, "fts", bm25=round(-float(row[3]), 3))
+        except sqlite3.Error as exc:
+            diag.warn("rag/fts", exc)
+
+    vector, vec_kind = [], "hash"
+    try:
         vector, vec_kind = embed(needle, kind="query")
-        rows = conn.execute(
-            "SELECT c.text, c.vec, d.path FROM chunks c JOIN docs d ON d.id = c.doc_id"
-            " WHERE COALESCE(c.vec_kind, '') = ?",
-            (vec_kind,),
-        ).fetchall()
+    except Exception as exc:
+        diag.warn("rag/vector", exc)
+    if vector:
+        try:
+            rows = conn.execute(
+                "SELECT c.id, c.text, c.vec, d.path FROM chunks c JOIN docs d ON d.id = c.doc_id"
+                " WHERE COALESCE(c.vec_kind, '') = ?",
+                (vec_kind,),
+            ).fetchall()
+        except sqlite3.Error as exc:
+            diag.warn("rag/vector_rows", exc)
+            rows = []
         scored = []
-        for text, vec_json, path in rows:
+        for row in rows:
             try:
-                vec = json.loads(vec_json)
+                vec = json.loads(row[2])
             except (ValueError, TypeError):
                 continue
             if len(vec) != len(vector):
                 continue
             score = sum(a * b for a, b in zip(vector, vec))
-            if score > 0.02:
-                scored.append((score, text, path))
+            if score > 0.2:
+                scored.append((score, row[0], row[1], row[3]))
         scored.sort(reverse=True, key=lambda item: item[0])
-        out = [{"score": round(item[0], 3), "path": item[2], "text": item[1]} for item in scored[:limit]]
+        for rank, item in enumerate(scored[:limit * 4]):
+            add(item[1], item[2], item[3], rank, "vec", cos=round(item[0], 3))
+
     conn.close()
+    order = sorted(found.values(), key=lambda it: (-it["rrf"], -(it["cos"] or 0)))
+    out = []
+    for item in order[:limit]:
+        score = item["cos"] if item["cos"] is not None else (item["bm25"] or 0.0)
+        out.append({"score": score, "rank": round(item["rrf"], 4), "source": "+".join(item["sources"]),
+                    "path": item["path"], "text": item["text"]})
     return out
 
 

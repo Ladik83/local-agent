@@ -2035,11 +2035,11 @@ function updateHfProgress(dl) {
 async function saveHfToken() {
   const field = document.getElementById('hfToken');
   const token = field ? field.value.trim() : '';
-  if (!token) { toast('Вставьте токен из настроек Hugging Face'); return; }
+  if (!token && !((STATE || {}).hf || {}).token_set) { toast('Вставьте токен из настроек Hugging Face'); return; }
   try {
     const data = await api('/api/hf/token', { token: token });
     if (field) field.value = '';
-    toast(data.token_set ? 'Токен сохранён' : 'Пустой токен');
+    toast(data.token_set ? 'Токен сохранён' : 'Токен удалён');
     await loadState();
   } catch (err) {
     toast('Ошибка: ' + err.message);
