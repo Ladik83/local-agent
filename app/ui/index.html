@@ -192,6 +192,8 @@
  <label class="row"><span>Токен Hugging Face (для приватных моделей)</span><input type="text" id="hfToken" class="wide" placeholder="hf_..."></label>
  <label class="row"><span>Модель для поиска по смыслу (.gguf)</span><input type="text" id="embedModel" class="wide" placeholder="F:\Models\bge-m3.gguf"></label>
  <label class="row"><span>Проверить и сохранить токен</span><button class="ghost" id="hfTokenSave">Сохранить токен</button></label>
+ <label class="row"><span>Открытый ключ обновлений (ECDSA P-256)</span><input type="text" id="updatePubkey" class="wide" placeholder="BASE64"></label>
+ <div class="sub" style="margin:-4px 0 10px 2px">Вставьте ключ из sign_update.py keygen — тогда приложение принимает только подписанные манифесты.</div>
  <label class="row"><span>Контекст, токенов</span>
  <input type="number" id="context" min="512" max="262144" step="512" class="wide" list="ctxPresets">
  <datalist id="ctxPresets">

@@ -21,8 +21,10 @@ from pathlib import Path
 
 try:  # обычный импорт пакетом
     from . import config
+    from . import signature
 except ImportError:  # запасной путь: импорт из корня проекта
     from app import config  # type: ignore
+    from app import signature  # type: ignore
 
 FALLBACK_VERSION = "0.5.0"
 USER_AGENT = "LocalAgent-Updater/1.0"
@@ -150,6 +152,18 @@ def check(url: str, timeout: float = 10) -> dict:
     result["url"] = str(data.get("url") or "").strip()
     result["notes"] = str(data.get("notes") or "")
     result["sha256"] = str(data.get("sha256") or "").strip().lower()
+
+    pubkey = str(config.load().get("update_pubkey") or "").strip()
+    if pubkey:
+        signature_b64 = str(data.get("signature") or "").strip()
+        message = signature.manifest_message(latest, result["url"], result["sha256"])
+        if not signature.verify(pubkey, message, signature_b64):
+            result["error"] = "Подпись манифеста не совпала: обновление отклонено"
+            result["signed"] = False
+            _log("проверка: подпись манифеста не совпала")
+            return result
+        result["signed"] = True
+
     result["update"] = _version_tuple(latest) > _version_tuple(current)
     result["ok"] = True
     _log("проверка: текущая %s, в манифесте %s, обновление %s"
@@ -476,9 +490,12 @@ def download_and_apply(manifest_url: str, zip_url: str = "", timeout: float = 10
             return out
     elif manifest_url:
         info = check(manifest_url, timeout=timeout)
-        if info.get("ok"):
-            latest = info.get("latest") or ""
-            expected = info.get("sha256") or ""
+        if not info.get("ok"):
+            out["error"] = info.get("error") or "Не удалось прочитать манифест"
+            LAST_ERROR = out["error"]
+            return out
+        latest = info.get("latest") or ""
+        expected = info.get("sha256") or ""
 
     out["version"] = latest or current
 

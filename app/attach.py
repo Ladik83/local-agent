@@ -128,6 +128,8 @@ def extract(raw_path: str) -> dict:
 def save_upload(name: str, data_b64: str) -> dict:
     """Файл из браузера (drag&drop): сохраняем во вложения и разбираем."""
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    if not str(name or "").strip():
+        return {"ok": False, "error": "Пустое имя файла"}
     safe = re.sub(r"[^0-9A-Za-zА-Яа-я._-]", "_", str(name or "file"))[-80:]
     if not safe:
         return {"ok": False, "error": "Пустое имя файла"}
@@ -135,6 +137,8 @@ def save_upload(name: str, data_b64: str) -> dict:
         raw = base64.b64decode(data_b64 or "")
     except (binascii.Error, ValueError):
         return {"ok": False, "error": "Битые данные файла"}
+    if not raw:
+        return {"ok": False, "error": "Пустой файл"}
     if len(raw) > MAX_UPLOAD:
         return {"ok": False, "error": "Файл больше 20 МБ"}
     target = UPLOAD_DIR / safe

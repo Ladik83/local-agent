@@ -514,7 +514,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(updater.check(link))
             elif route == "/api/update/apply":
                 link = str(data.get("url") or config.load().get("update_url") or "")
-                self._send(updater.download_and_apply(link, str(data.get("zip") or "")))
+                zip_name = str(data.get("zip") or "")
+                if data.get("wait"):
+                    self._send(updater.download_and_apply(link, zip_name))
+                else:
+                    self._send(_start_job("update_apply", lambda: updater.download_and_apply(link, zip_name)))
             elif route == "/api/autostart":
                 want = bool(data.get("enabled"))
                 self._send(autostart.set_enabled(want))

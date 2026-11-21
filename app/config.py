@@ -104,7 +104,9 @@ DEFAULTS: dict = {
     "engine_tag": None,          # например b12421
     "engine_variant": None,      # vulkan | cpu
     "last_model": None,
-    "embed_model": None,          # абсолютный путь к .gguf
+    "embed_model": None,
+    "update_pubkey": "",          # открытый ключ ECDSA P-256 для подписи манифеста
+    "telegram_chat": "",          # куда бот пишет отчёты
     "context": 8192,             # размер контекста
     "ngl": 99,                   # слоёв на GPU
     "temperature": 0.7,

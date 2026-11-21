@@ -111,11 +111,16 @@ def reset() -> None:
 def status() -> dict:
     path = find_model()
     running = bool(engine.embed_base_url())
+    cfg = config.load()
+    models_dir = str(cfg.get("models_dir") or "")
+    dir_ok = bool(models_dir) and pathlib.Path(models_dir).is_dir()
     return {
         "mode": STATE.get("mode") or ("ready" if running else "off"),
         "dim": STATE.get("dim") or 0,
         "model": path,
         "name": pathlib.Path(path).name if path else "",
         "running": running,
+        "dir": models_dir,
+        "dir_ok": dir_ok,
         "error": STATE.get("error"),
     }

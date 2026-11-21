@@ -141,6 +141,8 @@ function renderSettings() {
   document.getElementById('allowShell').checked = !!s.allow_shell;
   document.getElementById('allowWeb').checked = !!s.allow_web;
   document.getElementById('modelsDir').value = s.models_dir || '';
+  const pubkey = document.getElementById('updatePubkey');
+  if (pubkey) pubkey.value = s.update_pubkey || '';
   document.getElementById('extraDirs').value = (s.extra_dirs || []).join('; ');
   document.getElementById('context').value = String(s.context || 8192);
   const approval = document.getElementById('approvalMode');
@@ -382,11 +384,14 @@ async function startModel(path) {
   toast('Загружаю модель, это может занять до минуты');
   try {
     const resp = await fetch('/api/model/load', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path })
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: path, background: true })
     });
     const data = await resp.json();
-    if (data.ok) { toast('Модель готова'); await loadState(); }
-    else { toast('Не получилось: ' + (data.error || 'ошибка')); }
+    if (!data.ok) { toast('Не получилось: ' + (data.error || 'ошибка')); return; }
+    const result = (await waitJob('model_load', 600000)) || {};
+    if (result.ok) { toast('Модель готова'); await loadState(); }
+    else { toast('Не получилось: ' + (result.error || 'ошибка')); }
   } catch (err) {
     toast('Ошибка: ' + err.message);
   }
@@ -445,7 +450,8 @@ async function saveSettings() {
     extra_dirs: document.getElementById('extraDirs').value.split(';').map(function (t) { return t.trim(); }).filter(Boolean),
     approval_mode: (document.getElementById('approvalMode') || {}).value || 'ask',
     context: parseInt(document.getElementById('context').value, 10) || 8192,
-    embed_model: ((document.getElementById('embedModel') || {}).value || '').trim()
+    embed_model: ((document.getElementById('embedModel') || {}).value || '').trim(),
+    update_pubkey: ((document.getElementById('updatePubkey') || {}).value || '').trim()
   };
   await fetch('/api/settings', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch)
@@ -2066,7 +2072,8 @@ function renderEmbeddings() {
     state.textContent = text;
   }
   if (hint) {
-    hint.textContent = info.model
+    if (info.dir_ok === false) hint.textContent = 'Папка моделей недоступна: ' + (info.dir || '') + ' Подключите диск или укажите другую папку в Настройках.';
+    else hint.textContent = info.model
       ? (info.name + (info.dim ? ' · вектор из ' + info.dim + ' чисел' : ''))
       : 'Модели нет. Скачайте на вкладке «Модели», подойдёт bge-m3 или embeddinggemma.';
   }

@@ -19,7 +19,7 @@ def get(path, timeout=120):
 def post(path, payload, timeout=300):
     req = urllib.request.Request(
         BASE + path,
-        data=json.dumps(payload).encode("utf-8"),
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         headers={"Content-Type": "application/json", "X-Agent-Token": TOKEN},
     )
     with urllib.request.urlopen(req, timeout=timeout) as res:
@@ -34,8 +34,9 @@ for _ in range(20):
         time.sleep(1)
 
 state = get("/api/state")
-print("1. состояние: hf =", state.get("hf"), "| embeddings =", (state.get("embeddings") or {}).get("mode"),
-      (state.get("embeddings") or {}).get("name"))
+emb = state.get("embeddings") or {}
+print("1. состояние: hf =", state.get("hf"), "| embeddings =", emb.get("mode"),
+      "| папка моделей:", emb.get("dir"), "есть" if emb.get("dir_ok") else "НЕТ")
 
 found = get("/api/hf/search?q=" + urllib.parse.quote("nomic-embed"))
 items = found.get("items") or []
@@ -52,15 +53,21 @@ bad = get("/api/hf/files?repo=" + urllib.parse.quote("../etc/passwd"))
 print("4. защита от чужого пути:", bad.get("ok") is False, "|", bad.get("error"))
 
 check = post("/api/embeddings/check", {})
-print("5. проверка эмбеддингов:", check.get("ok"), "| размер вектора:", check.get("dim"))
+if check.get("ok"):
+    print("5. проверка эмбеддингов: True | размер вектора:", check.get("dim"))
+else:
+    print("5. проверка эмбеддингов: пропущено —", str(check.get("error"))[:70])
 
-hits = get("/api/rag/search?q=" + urllib.parse.quote("фиолетовый жираф танцует вальс") + "&limit=3")
-print("6. поиск по базе знаний:", len(hits.get("items") or []), "| лучший:", round((hits.get("items") or [{}])[0].get("score") or 0, 3))
+hits = get("/api/rag/search?q=" + urllib.parse.quote("проверка токена") + "&limit=3").get("items") or []
+sources = sorted({str(hit.get("source")) for hit in hits})
+print("6. поиск по базе знаний:", len(hits), "| источники:", sources,
+      "| лучший:", round((hits[0].get("score") or 0), 3) if hits else "-")
 
 page = urllib.request.urlopen(urllib.request.Request(BASE + "/", headers={"X-Agent-Token": TOKEN}), timeout=60).read().decode("utf-8")
 marks = {"подвкладки моделей": 'data-models="online"' in page,
          "поиск HF": 'id="hfQuery"' in page,
          "статус эмбеддингов": 'id="embState"' in page,
          "пересчёт базы": 'id="kbReindex"' in page,
-         "токен HF": 'id="hfToken"' in page}
+         "токен HF": 'id="hfToken"' in page,
+         "ключ обновлений": 'id="updatePubkey"' in page}
 print("7. интерфейс:", marks)
