@@ -1,0 +1,1630 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Локальный агент — макет рабочего пространства</title>
+<!--
+  Макет рабочего пространства «Локального агента».
+  Один файл, без сети, без библиотек. Палитра и шрифт — как в app/ui/style.css.
+  Варианты: A (две панели), B (левая панель + шторка), C (вкладки + плавающие блоки).
+-->
+<style>
+/* ================= Палитра и плотность ================= */
+:root{
+  --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --text:#e8ecf3; --muted:#98a2b3;
+  --accent:#5b8cff; --ok:#3ecf8e; --warn:#ffb454; --err:#ff6b6b; --line:#262b36;
+  --bg3:#0b0e14;
+}
+*{box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font:15px/1.55 "Segoe UI",system-ui,sans-serif;
+  display:flex;flex-direction:column;
+  -webkit-font-smoothing:antialiased;
+}
+body[data-density="compact"]{
+  --fs:13px;--fs2:12px;--fs3:10.5px;--gap:6px;--pad:8px;--pad2:10px;
+  --r:8px;--r2:10px;--headH:28px;--icon:18px;--floatW:246px;
+}
+body[data-density="normal"]{
+  --fs:14.5px;--fs2:13px;--fs3:11.5px;--gap:10px;--pad:12px;--pad2:14px;
+  --r:10px;--r2:12px;--headH:36px;--icon:22px;--floatW:270px;
+}
+body[data-density="roomy"]{
+  --fs:16px;--fs2:14px;--fs3:12.5px;--gap:14px;--pad:16px;--pad2:18px;
+  --r:12px;--r2:14px;--headH:42px;--icon:24px;--floatW:292px;
+}
+button{font:inherit;color:inherit}
+.muted{color:var(--muted)}
+.tiny{font-size:var(--fs3);line-height:1.45;color:var(--muted)}
+.center{text-align:center}
+
+/* тонкие полосы прокрутки — как в приложении */
+*{scrollbar-width:thin;scrollbar-color:transparent transparent}
+*:hover{scrollbar-color:rgba(255,255,255,.16) transparent}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:transparent;border-radius:8px;border:2px solid transparent;background-clip:content-box}
+*:hover::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);background-clip:content-box}
+*:hover::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.32);background-clip:content-box}
+::-webkit-scrollbar-corner{background:transparent}
+
+/* ================= Верхняя строка ================= */
+.topbar{
+  flex:none;display:flex;align-items:center;gap:14px;
+  height:56px;padding:0 14px;background:var(--panel);
+  border-bottom:1px solid var(--line);position:relative;z-index:60;
+}
+.brand{font-size:16.5px;letter-spacing:.2px;white-space:nowrap}
+.brand b{color:var(--accent);font-weight:700}
+.brand .tag{
+  font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
+  border:1px solid var(--line);border-radius:99px;padding:2px 7px;margin-left:6px;vertical-align:2px;
+}
+.seg{display:flex;gap:2px;padding:3px;background:var(--bg);border:1px solid var(--line);border-radius:10px}
+.seg button{
+  display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;
+  background:transparent;color:var(--muted);border-radius:7px;padding:5px 9px;
+  font-size:12.5px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s;
+}
+.seg button:hover{color:var(--text)}
+.seg button.active{background:var(--panel2);color:var(--text);border-color:var(--line)}
+.seg button i{
+  font-style:normal;font-weight:700;font-size:11px;line-height:1;
+  color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:2px 4px;
+}
+.seg button.active i{color:var(--accent);border-color:rgba(91,140,255,.45);background:rgba(91,140,255,.1)}
+.densityWrap{display:flex;align-items:center;gap:8px;margin-left:2px}
+.densityWrap .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+.seg.small button{font-size:12px;padding:4px 8px}
+.topRight{margin-left:auto;display:flex;align-items:center;gap:8px}
+.status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--err);flex:none}
+.dot.on{background:var(--ok);box-shadow:0 0 0 3px rgba(62,207,142,.12)}
+.iconBtn{
+  width:30px;height:30px;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--muted);cursor:pointer;font-size:13px;
+  display:inline-grid;place-items:center;padding:0;
+}
+.iconBtn:hover{color:var(--text);border-color:var(--accent)}
+button.ghost{
+  background:var(--panel2);color:var(--text);border:1px solid var(--line);
+  border-radius:10px;padding:8px 12px;cursor:pointer;font-size:13px;
+}
+button.ghost:hover{border-color:var(--accent)}
+button.ghost.tiny{padding:4px 9px;border-radius:8px;font-size:11.5px}
+button.ghost.wide{width:100%;text-align:center}
+button.primary{
+  background:var(--accent);color:#08101f;border:0;border-radius:10px;
+  padding:9px 16px;font-weight:600;cursor:pointer;font-size:13.5px;
+}
+button.primary:hover{filter:brightness(1.06)}
+button.primary.tiny{padding:4px 10px;font-size:11.5px;border-radius:8px}
+
+/* ================= Сетка приложения ================= */
+.app{flex:1;min-height:0;display:flex;flex-direction:column}
+.work{flex:1;min-height:0;padding:var(--gap);display:grid;position:relative}
+.mtabs{display:none}
+
+/* A: две панели + центр */
+.app[data-variant="A"] .work{
+  grid-template-columns:var(--leftW,280px) 5px minmax(0,1fr) 5px var(--rightW,300px);
+  grid-template-rows:minmax(0,1fr) 5px var(--dockH,236px);
+}
+.app[data-variant="A"] .zone-left{grid-column:1;grid-row:1}
+.app[data-variant="A"] .vres-left{grid-column:2;grid-row:1}
+.app[data-variant="A"] .stage{grid-column:3;grid-row:1}
+.app[data-variant="A"] .vres-right{grid-column:4;grid-row:1}
+.app[data-variant="A"] .zone-right{grid-column:5;grid-row:1}
+.app[data-variant="A"] .hres{grid-column:1/-1;grid-row:2}
+.app[data-variant="A"] .zone-bottom{grid-column:1/-1;grid-row:3}
+
+/* B: одна левая панель + шторка */
+.app[data-variant="B"] .work{
+  grid-template-columns:var(--leftW,300px) 5px minmax(0,1fr);
+  grid-template-rows:minmax(0,1fr) 5px var(--dockH,300px);
+}
+.app[data-variant="B"] .zone-left{grid-column:1;grid-row:1}
+.app[data-variant="B"] .vres-left{grid-column:2;grid-row:1}
+.app[data-variant="B"] .stage{grid-column:3;grid-row:1}
+.app[data-variant="B"] .zone-right{display:none}
+.app[data-variant="B"] .vres-right{display:none}
+.app[data-variant="B"] .hres{grid-column:1/-1;grid-row:2}
+.app[data-variant="B"] .zone-bottom{grid-column:1/-1;grid-row:3}
+
+/* ================= Панели и блоки ================= */
+.zone{
+  display:flex;flex-direction:column;min-width:0;min-height:0;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  overflow:hidden;transition:border-color .15s;
+}
+.zone.over{border-color:var(--accent);box-shadow:0 0 0 1px rgba(91,140,255,.25) inset}
+.zoneHead{
+  flex:none;display:flex;align-items:center;gap:7px;
+  padding:8px 10px;border-bottom:1px solid var(--line);
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);
+}
+.zoneHead .zi{color:var(--accent);font-size:11px;line-height:1}
+.zoneHead .cnt{
+  margin-left:auto;font-size:10px;color:var(--muted);background:var(--panel2);
+  border-radius:99px;padding:1px 7px;letter-spacing:0;
+}
+.zoneHead .zBtn{
+  border:0;background:transparent;color:var(--muted);cursor:pointer;
+  padding:0 2px;font-size:12px;line-height:1;
+}
+.zoneHead .zBtn:hover{color:var(--text)}
+.zoneBody{
+  flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
+  display:flex;flex-direction:column;gap:var(--gap);padding:var(--gap);
+  position:relative;
+}
+.zone-bottom .zoneBody{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+  align-items:start;
+}
+.zoneBody.over{background:rgba(91,140,255,.035)}
+.zoneBody:empty::before{
+  content:"Перетащите сюда блоки";
+  display:grid;place-items:center;min-height:90px;padding:14px;
+  border:1px dashed var(--line);border-radius:var(--r);
+  color:var(--muted);font-size:var(--fs3);text-align:center;
+}
+
+.block{
+  background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
+  min-width:0;display:flex;flex-direction:column;position:relative;
+  transition:border-color .12s,box-shadow .12s;
+}
+.block:hover{border-color:#333b4a}
+.block.collapsed .blockBody{display:none}
+.blockHead{
+  display:flex;align-items:center;gap:7px;min-height:var(--headH);
+  padding:6px var(--pad);cursor:grab;touch-action:none;
+  user-select:none;-webkit-user-select:none;
+}
+.blockHead:active{cursor:grabbing}
+.blockHead .bIco{
+  width:var(--icon);height:var(--icon);flex:none;border-radius:6px;
+  background:rgba(91,140,255,.11);display:grid;place-items:center;
+  font-size:calc(var(--icon) * .56);line-height:1;
+}
+.blockHead .bTtl{
+  font-size:var(--fs);font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;min-width:0;
+}
+.blockHead .help{
+  margin-left:auto;flex:none;width:16px;height:16px;border-radius:50%;
+  border:1px solid var(--line);background:transparent;color:var(--muted);
+  font-size:10px;line-height:1;cursor:help;display:grid;place-items:center;padding:0;
+}
+.blockHead .help:hover{color:var(--text);border-color:var(--accent)}
+.blockHead .chev{
+  flex:none;border:0;background:transparent;color:var(--muted);cursor:pointer;
+  font-size:11px;line-height:1;padding:2px 1px;
+}
+.blockHead .chev:hover{color:var(--text)}
+.blockBody{padding:0 var(--pad) var(--pad);display:flex;flex-direction:column;gap:7px;min-width:0}
+.blockPh{
+  border:1px dashed var(--accent);border-radius:var(--r);
+  background:rgba(91,140,255,.06);flex:none;
+}
+body.dragging,body.dragging *{user-select:none!important;cursor:grabbing!important}
+.block.isDragging{
+  position:fixed;z-index:600;pointer-events:none;opacity:.97;
+  box-shadow:0 26px 60px rgba(0,0,0,.6);transform:scale(1.012);
+  overflow:hidden;margin:0;
+}
+
+/* содержимое блоков */
+.bRow{display:flex;align-items:center;gap:8px;justify-content:space-between;min-width:0}
+.bName{font-size:var(--fs2);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.badge{
+  flex:none;font-size:10px;padding:1px 7px;border-radius:99px;
+  border:1px solid var(--line);color:var(--muted);white-space:nowrap;
+}
+.badge.ok{color:var(--ok);border-color:rgba(62,207,142,.38);background:rgba(62,207,142,.08)}
+.kv{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:var(--fs2);color:var(--muted)}
+.kv b{color:var(--text);font-weight:600;white-space:nowrap}
+.mbar{height:5px;border-radius:99px;background:var(--bg3);overflow:hidden}
+.mbar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.mbar i.warn{background:var(--warn)}
+.bBtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
+.bInput{
+  width:100%;background:var(--bg3);color:var(--text);border:1px solid var(--line);
+  border-radius:8px;padding:6px 8px;font:inherit;font-size:var(--fs2);min-width:0;
+}
+.bInput:focus{outline:none;border-color:var(--accent)}
+.bInput::placeholder{color:#5f6b7d}
+
+.listItem{
+  display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;
+  font-size:var(--fs2);color:var(--muted);cursor:pointer;border:1px solid transparent;
+}
+.listItem:hover{background:rgba(255,255,255,.035);color:var(--text)}
+.listItem.active{
+  background:rgba(91,140,255,.13);color:var(--text);
+  border-color:rgba(91,140,255,.22);box-shadow:inset 2px 0 0 var(--accent);
+}
+.listItem .liT{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.listItem .liM{flex:none;font-size:10px;color:var(--muted)}
+.proj{padding:6px 8px;border-radius:8px;cursor:pointer;border:1px solid transparent}
+.proj:hover{background:rgba(255,255,255,.035);border-color:var(--line)}
+.projT{font-size:var(--fs2);color:var(--text);font-weight:600;display:flex;gap:6px;align-items:center}
+.projP{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:20px}
+.task{display:flex;align-items:center;gap:8px;font-size:var(--fs2);color:var(--text);padding:2px 0;min-width:0}
+.task span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sw{
+  flex:none;width:30px;height:17px;border-radius:99px;background:var(--bg3);
+  border:1px solid var(--line);position:relative;cursor:pointer;transition:.15s;padding:0;
+}
+.sw::after{
+  content:"";position:absolute;left:2px;top:2px;width:11px;height:11px;border-radius:50%;
+  background:var(--muted);transition:.15s;
+}
+.sw.on{background:rgba(91,140,255,.22);border-color:var(--accent)}
+.sw.on::after{left:15px;background:var(--accent)}
+.checkRow{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:var(--fs2);color:var(--text);cursor:pointer}
+.chips{display:flex;gap:5px;flex-wrap:wrap}
+.roleChip{
+  font-size:10.5px;color:var(--accent);border:1px solid rgba(91,140,255,.3);
+  background:rgba(91,140,255,.08);border-radius:99px;padding:2px 8px;white-space:nowrap;
+}
+.roleChip.add{color:var(--muted);border-color:var(--line);background:transparent;cursor:pointer}
+.micBtn{
+  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  background:rgba(91,140,255,.1);border:1px solid rgba(91,140,255,.35);color:var(--text);
+  border-radius:9px;padding:9px 10px;font-size:var(--fs2);font-weight:600;cursor:pointer;
+}
+.micBtn:hover{background:rgba(91,140,255,.18);border-color:var(--accent)}
+.warnNote{
+  font-size:10.5px;line-height:1.4;color:var(--warn);
+  border:1px dashed rgba(255,180,84,.3);border-radius:7px;padding:5px 7px;
+}
+.nowRow{display:flex;align-items:center;gap:7px;font-size:var(--fs2)}
+.nowRow b{font-weight:600}
+.nowRow .tiny{margin-left:auto}
+.live{
+  width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none;
+  box-shadow:0 0 0 3px rgba(62,207,142,.14);animation:pulse 1.6s infinite;
+}
+@keyframes pulse{50%{opacity:.4}}
+.spark{display:flex;align-items:flex-end;gap:3px;height:34px;padding:2px 0}
+.spark i{
+  flex:1;background:var(--accent);opacity:.5;border-radius:2px 2px 0 0;min-height:3px;
+}
+.spark i:nth-child(3n){opacity:.8}
+
+/* ================= Центральный чат ================= */
+.stage{
+  display:flex;flex-direction:column;min-width:0;min-height:0;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;
+  overflow:hidden;position:relative;z-index:1;
+}
+.chatTop{
+  flex:none;display:flex;align-items:center;gap:10px;
+  padding:9px var(--pad2);border-bottom:1px solid var(--line);min-width:0;
+}
+.chatTop .ct{min-width:0}
+.chatTop .t{
+  font-size:var(--fs);font-weight:600;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+}
+.chatTop .s{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chatTools{margin-left:auto;display:flex;gap:5px;flex:none}
+.chatTools button{
+  width:28px;height:28px;border-radius:8px;border:1px solid var(--line);
+  background:var(--panel2);color:var(--muted);cursor:pointer;font-size:12px;
+  display:grid;place-items:center;padding:0;
+}
+.chatTools button:hover{color:var(--text);border-color:var(--accent)}
+.chatScroll{flex:1;min-height:0;overflow-y:auto;padding:var(--pad2) var(--pad2) 6px}
+.chatInner{width:100%;max-width:820px;margin:0 auto}
+.msgs{display:flex;flex-direction:column;gap:12px}
+.msg{
+  max-width:90%;padding:10px 13px;border-radius:13px;
+  font-size:var(--fs);line-height:1.55;white-space:pre-wrap;overflow-wrap:break-word;
+}
+.msg.user{align-self:flex-end;background:#23304a;border:1px solid #2c3c5c}
+.msg.bot{align-self:flex-start;background:var(--panel2);border:1px solid var(--line)}
+.msg .who{
+  display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--accent);margin-bottom:3px;font-weight:600;
+}
+.toolLine{
+  align-self:flex-start;max-width:90%;font-size:var(--fs3);color:var(--muted);
+  border:1px dashed var(--line);border-radius:8px;padding:5px 9px;
+}
+.toolLine b{color:var(--accent);font-weight:600}
+.approveBar{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  border:1px solid rgba(255,180,84,.32);background:rgba(255,180,84,.06);
+  border-radius:9px;padding:5px 8px;margin:0 0 7px;font-size:var(--fs3);color:var(--text);
+}
+.approveBar .aWarn{color:var(--warn);font-weight:600;white-space:nowrap}
+.approveBar .aTxt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.approveBar .aTxt b{color:var(--warn);font-weight:600}
+.approveBar .aBtns{margin-left:auto;display:flex;gap:5px;flex:none}
+.modeRow{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:0 0 6px}
+.mode{
+  display:inline-flex;align-items:center;gap:5px;background:var(--panel2);
+  border:1px solid var(--line);color:var(--muted);border-radius:9px;
+  padding:5px 10px;cursor:pointer;font-size:var(--fs2);
+}
+.mode:hover{color:var(--text);border-color:var(--accent)}
+.mode.active{color:var(--text);border-color:var(--accent);background:rgba(91,140,255,.1);font-weight:600}
+.mode .help,.chip .help{
+  width:15px;height:15px;border-radius:50%;border:1px solid var(--line);
+  display:inline-grid;place-items:center;font-size:9px;color:var(--muted);cursor:help;flex:none;
+}
+.tplRow{display:flex;gap:5px;flex-wrap:wrap;padding:0 0 8px}
+.chip{
+  background:var(--panel2);border:1px solid var(--line);color:var(--muted);
+  border-radius:99px;padding:4px 10px;font-size:var(--fs3);cursor:pointer;
+}
+.chip:hover{color:var(--text);border-color:var(--accent)}
+.compWrap{flex:none;border-top:1px solid var(--line);padding:7px var(--pad2) 9px;background:var(--panel)}
+.modelRow{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:var(--fs2);color:var(--muted);padding:0 0 7px}
+.modelRow select{
+  background:var(--panel2);color:var(--text);border:1px solid var(--line);
+  border-radius:8px;padding:4px 7px;font:inherit;font-size:var(--fs2);max-width:300px;
+}
+.modelRow .sub{margin-left:auto;font-size:10.5px;color:var(--muted);white-space:nowrap}
+.composer{display:flex;gap:7px;align-items:flex-end}
+.composer textarea{
+  flex:1;min-width:0;resize:none;background:var(--panel2);color:var(--text);
+  border:1px solid var(--line);border-radius:11px;padding:9px 11px;
+  font:inherit;font-size:var(--fs2);line-height:1.5;max-height:150px;min-height:38px;
+}
+.composer textarea:focus{outline:none;border-color:var(--accent)}
+.composer textarea::placeholder{color:#5f6b7d}
+.composer .iconBtn{width:38px;height:38px;border-radius:10px}
+.hint{font-size:10.5px;color:#5f6b7d;padding:5px 1px 0}
+
+/* ================= Статусная строка ================= */
+.statusbar{
+  flex:none;display:flex;align-items:center;gap:14px;flex-wrap:nowrap;
+  padding:5px 12px;border-top:1px solid var(--line);background:var(--panel);
+  font-size:11.5px;color:var(--muted);min-height:31px;z-index:50;
+}
+.sbBtn{
+  display:inline-flex;align-items:center;gap:5px;background:transparent;
+  border:1px solid var(--line);color:var(--muted);border-radius:7px;
+  padding:2px 8px;font:inherit;font-size:11px;cursor:pointer;flex:none;
+}
+.sbBtn:hover{color:var(--text);border-color:var(--accent)}
+.sbItem{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sbItem b{color:var(--text);font-weight:600}
+.sbOk{color:var(--ok)}
+.sbRight{margin-left:auto;color:#5f6b7d;white-space:nowrap;flex:none}
+
+/* ================= Разделители ================= */
+.res{position:relative;background:transparent;touch-action:none;z-index:20}
+.res.vres{cursor:col-resize}
+.res.hres{cursor:row-resize}
+.res::after{
+  content:"";position:absolute;background:var(--line);border-radius:2px;transition:background .12s;
+}
+.res.vres::after{top:8px;bottom:8px;left:1px;width:2px}
+.res.hres::after{left:8px;right:8px;top:2px;height:2px}
+.res:hover::after,.res.active::after{background:var(--accent)}
+.res.active{background:rgba(91,140,255,.05)}
+
+/* ================= Вариант C ================= */
+.ctabs{display:none}
+.app[data-variant="C"] .ctabs{
+  flex:none;display:flex;gap:3px;padding:6px var(--gap);
+  background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto;
+}
+.ctab{
+  border:1px solid transparent;background:transparent;color:var(--muted);
+  border-radius:8px;padding:6px 12px;font-size:12.5px;cursor:pointer;white-space:nowrap;
+}
+.ctab:hover{color:var(--text);background:var(--panel2)}
+.ctab.active{color:var(--text);background:var(--panel2);border-color:var(--line)}
+.ctab.active::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:7px;vertical-align:1px}
+.app[data-variant="C"] .work{
+  display:flex;position:relative;padding:0;
+  background-image:radial-gradient(rgba(255,255,255,.032) 1px,transparent 1px);
+  background-size:22px 22px;
+}
+.app[data-variant="C"] .zone{display:contents}
+.app[data-variant="C"] .zoneBody{display:contents}
+.app[data-variant="C"] .zoneHead{display:none}
+.app[data-variant="C"] .vres,.app[data-variant="C"] .hres{display:none}
+.app[data-variant="C"] .stage{
+  width:min(840px,calc(100% - 580px));height:calc(100% - 228px);
+  margin:12px auto 0;box-shadow:0 18px 46px rgba(0,0,0,.35);
+}
+.app[data-variant="C"] .block{
+  position:absolute;width:var(--floatW);z-index:4;
+  box-shadow:0 12px 30px rgba(0,0,0,.38);
+}
+.app[data-variant="C"] .block:hover{box-shadow:0 16px 38px rgba(0,0,0,.46)}
+.app[data-variant="C"] .block .blockHead{cursor:grab}
+.cph{
+  position:absolute;inset:0;z-index:40;background:var(--bg);
+  display:none;align-items:center;justify-content:center;padding:24px;
+}
+.cph.show{display:flex}
+.cphCard{
+  max-width:440px;width:100%;text-align:center;background:var(--panel);
+  border:1px solid var(--line);border-radius:16px;padding:26px 24px;
+}
+.cphIco{font-size:34px;line-height:1;margin-bottom:8px}
+.cphCard h3{margin:0 0 6px;font-size:17px}
+.cphCard p{margin:0 0 16px;color:var(--muted);font-size:13px;line-height:1.55}
+
+/* ================= Подсказки, модальное окно, тост ================= */
+.tip{
+  position:fixed;z-index:900;max-width:280px;left:-9999px;top:-9999px;
+  background:var(--bg3);border:1px solid var(--line);color:var(--text);
+  padding:8px 10px;border-radius:9px;font-size:12px;line-height:1.45;
+  box-shadow:0 14px 34px rgba(0,0,0,.55);opacity:0;transform:translateY(4px);
+  transition:opacity .12s,transform .12s;pointer-events:none;
+}
+.tip.show{opacity:1;transform:none}
+.modalBack{
+  position:fixed;inset:0;background:rgba(4,6,10,.72);z-index:800;
+  display:none;align-items:center;justify-content:center;padding:20px;
+}
+.modalBack.show{display:flex}
+.modal{
+  background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  width:100%;max-width:520px;max-height:82vh;overflow-y:auto;padding:20px 22px;
+  box-shadow:0 30px 80px rgba(0,0,0,.6);
+}
+.modal h3{margin:0 0 4px;font-size:17px}
+.modal .lead{color:var(--muted);font-size:12.5px;margin:0 0 14px}
+.modal ul{margin:0 0 16px;padding-left:19px}
+.modal li{font-size:13px;line-height:1.55;margin:7px 0}
+.modal li b{color:var(--text)}
+.modal li .k{
+  font-size:11px;border:1px solid var(--line);background:var(--panel2);
+  border-radius:5px;padding:1px 5px;color:var(--text);
+}
+.toast{
+  position:fixed;left:50%;bottom:42px;transform:translateX(-50%) translateY(6px);
+  background:var(--panel2);border:1px solid var(--line);color:var(--text);
+  padding:9px 15px;border-radius:10px;font-size:12.5px;opacity:0;
+  pointer-events:none;transition:.2s;z-index:950;max-width:80vw;
+  box-shadow:0 16px 40px rgba(0,0,0,.5);
+}
+.toast.show{opacity:1;transform:translateX(-50%)}
+
+/* ================= Узкие экраны ================= */
+@media (max-width:1200px){
+  .seg button span{display:none}
+  .seg button{padding:5px 8px}
+  .densityWrap .lbl{display:none}
+}
+
+/* A: правая панель уходит вниз, шторка — тонкая полоса и открывается поверх */
+@media (max-width:1100px){
+  .app[data-variant="A"] .work{
+    grid-template-columns:var(--leftW,280px) 5px minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr) 176px 5px 40px;
+  }
+  .app[data-variant="A"] .zone-left{grid-column:1;grid-row:1/span 2}
+  .app[data-variant="A"] .vres-left{grid-column:2;grid-row:1/span 2}
+  .app[data-variant="A"] .stage{grid-column:3;grid-row:1}
+  .app[data-variant="A"] .zone-right{grid-column:3;grid-row:2;border-radius:12px}
+  .app[data-variant="A"] .vres-right{display:none}
+  .app[data-variant="A"] .hres{grid-column:1/-1;grid-row:3}
+  .app[data-variant="A"] .zone-bottom{grid-column:1/-1;grid-row:4}
+  .app[data-variant="A"] .zone-bottom .zoneBody{display:none}
+  .app[data-variant="A"].dockOpen .work{grid-template-rows:minmax(0,1fr) 176px 5px 0}
+  .app[data-variant="A"].dockOpen .zone-bottom{
+    position:fixed;left:0;right:0;bottom:31px;height:46vh;z-index:70;
+    border-radius:14px 14px 0 0;border-bottom:0;
+    box-shadow:0 -18px 44px rgba(0,0,0,.55);
+  }
+  .app[data-variant="A"].dockOpen .zone-bottom .zoneBody{display:grid}
+  .app[data-variant="A"] .zone-right .zoneBody{
+    display:flex;flex-direction:row;overflow-x:auto;overflow-y:hidden;
+    gap:var(--gap);align-items:stretch;
+  }
+  .app[data-variant="A"] .zone-right .block{flex:0 0 255px}
+  .app[data-variant="A"] .zone-right .blockBody{overflow-y:auto}
+}
+
+/* C: плавающие блоки становятся списком, когда им мало места (см. JS) */
+.app[data-variant="C"].list .work{
+  display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;
+  padding:0 0 var(--gap);background-image:none;
+}
+.app[data-variant="C"].list .stage{
+  width:auto;height:78vh;flex:none;margin:0 0 var(--gap);
+  border-radius:0;border-left:0;border-right:0;box-shadow:none;
+}
+.app[data-variant="C"].list .zone{
+  display:flex;flex-direction:column;flex:none;height:auto;
+  border-radius:0;border-left:0;border-right:0;border-bottom:0;
+}
+.app[data-variant="C"].list .zoneBody{display:grid;grid-template-columns:1fr;padding:var(--gap)}
+.app[data-variant="C"].list .zoneHead{display:flex}
+.app[data-variant="C"].list .block{position:static;width:auto;box-shadow:none}
+.app[data-variant="C"].list .zone-left{order:2}
+.app[data-variant="C"].list .stage{order:1}
+.app[data-variant="C"].list .zone-right{order:3}
+.app[data-variant="C"].list .zone-bottom{order:4}
+.app[data-variant="C"].list .zone-bottom .zoneBody{grid-template-columns:1fr}
+
+/* A/B: панели становятся вкладками */
+@media (max-width:820px){
+  .topbar{height:52px;gap:8px;padding:0 10px}
+  .brand{font-size:15px}
+  .brand .tag{display:none}
+  .topStatus{display:none}
+  .topRight{gap:6px}
+  .statusbar{gap:9px;overflow:hidden}
+  .sbRight{display:none}
+  .sbItem:nth-of-type(n+5){display:none}
+  .app[data-variant="A"] .work,
+  .app[data-variant="B"] .work{
+    display:flex;flex-direction:column;padding:var(--gap);gap:var(--gap);
+  }
+  .mtabs{display:flex;gap:5px;flex:none;overflow-x:auto}
+  .mtab{
+    flex:none;border:1px solid var(--line);background:transparent;color:var(--muted);
+    border-radius:8px;padding:5px 11px;font-size:12px;cursor:pointer;
+  }
+  .mtab.active{background:var(--panel2);color:var(--text);border-color:var(--accent)}
+  .app[data-variant="A"] .work>.zone,
+  .app[data-variant="A"] .work>.stage,
+  .app[data-variant="B"] .work>.zone,
+  .app[data-variant="B"] .work>.stage{
+    display:none!important;flex:1 1 auto;min-height:0;
+    width:auto!important;height:auto!important;border-radius:var(--r2);
+  }
+  .app[data-variant="A"] .work[data-mtab="left"]>.zone-left,
+  .app[data-variant="A"] .work[data-mtab="right"]>.zone-right,
+  .app[data-variant="A"] .work[data-mtab="bottom"]>.zone-bottom,
+  .app[data-variant="A"] .work[data-mtab="stage"]>.stage,
+  .app[data-variant="B"] .work[data-mtab="left"]>.zone-left,
+  .app[data-variant="B"] .work[data-mtab="bottom"]>.zone-bottom,
+  .app[data-variant="B"] .work[data-mtab="stage"]>.stage{display:flex!important}
+  .app[data-variant="A"] .work .vres,
+  .app[data-variant="A"] .work .hres,
+  .app[data-variant="B"] .work .vres,
+  .app[data-variant="B"] .work .hres{display:none!important}
+  .app[data-variant="A"] .zoneBody,
+  .app[data-variant="B"] .zoneBody{grid-template-columns:1fr!important}
+  .app[data-variant="A"] .zone-bottom .zoneBody,
+  .app[data-variant="B"] .zone-bottom .zoneBody{grid-template-columns:1fr!important}
+  .app[data-variant="A"] .zone-bottom .zoneBody{display:grid!important}
+  .app[data-variant="A"] .zone-bottom,
+  .app[data-variant="A"].dockOpen .zone-bottom{
+    position:static!important;left:auto;right:auto;bottom:auto;
+    height:auto!important;border-radius:var(--r2);
+    border-bottom:1px solid var(--line);box-shadow:none;
+  }
+  .chatScroll{padding:12px 12px 4px}
+  .compWrap{padding:6px 12px 8px}
+}
+@media (max-width:560px){
+  .topbar{gap:5px;padding:0 8px}
+  .brand b{display:inline}
+  .brand{font-size:14px;max-width:96px;overflow:hidden;text-overflow:ellipsis}
+  .seg.small button{font-size:10.5px;padding:4px 5px}
+  .topRight .ghost span{display:none}
+  .chatTop .s{display:none}
+  .statusbar .sbItem:nth-of-type(n+3){display:none}
+  .modelRow .sub{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body data-density="normal" data-variant="A">
+<noscript><div style="padding:20px">Для макета нужен JavaScript.</div></noscript>
+
+<header class="topbar">
+  <div class="brand">Локальный <b>агент</b><span class="tag">макет</span></div>
+
+  <div class="seg" id="variantSeg" role="group" aria-label="Вариант компоновки">
+    <button data-variant="A" class="active" data-tip="Вариант A. Две боковые панели и чат в центре. Блоки можно переносить в любую из трёх зон."><i>A</i><span>Две панели</span></button>
+    <button data-variant="B" data-tip="Вариант B. Одна левая панель, остальные блоки — в широкой нижней шторке. Больше места чату."><i>B</i><span>Шторка</span></button>
+    <button data-variant="C" data-tip="Вариант C. Разделы на весь экран, блоки плавают поверх и двигаются свободно."><i>C</i><span>Плавающие</span></button>
+  </div>
+
+  <div class="densityWrap">
+    <span class="lbl">Плотность</span>
+    <div class="seg small" id="densitySeg" role="group" aria-label="Плотность интерфейса">
+      <button data-density="compact" data-tip="Компактно: меньше отступов, больше блоков на экране. Удобно на ноутбуке.">Компактно</button>
+      <button data-density="normal" class="active" data-tip="Обычно: базовый размер из приложения — 15 px и отступы 10 px.">Обычно</button>
+      <button data-density="roomy" data-tip="Просторно: крупные подписи и отступы. Удобно, если тяжело читать мелкий текст.">Просторно</button>
+    </div>
+  </div>
+
+  <div class="topRight">
+    <span class="status topStatus"><span class="dot on"></span>модель загружена</span>
+    <button class="iconBtn" id="helpBtn" aria-label="Как пользоваться макетом" data-tip="Короткая инструкция: перетаскивание, плотность, варианты.">?</button>
+    <button class="ghost tiny" id="resetBtn" data-tip="Вернуть блоки, размеры панелей и плотность по умолчанию. Раскладка хранится только на этом компьютере.">↺ <span>Сбросить</span></button>
+  </div>
+</header>
+
+<div class="app" id="app" data-variant="A">
+  <div class="ctabs" id="ctabs">
+    <button class="ctab active" data-ctab="chat">Чат</button>
+    <button class="ctab" data-ctab="models">Модели</button>
+    <button class="ctab" data-ctab="kb">Знания</button>
+    <button class="ctab" data-ctab="tasks">Задачи</button>
+    <button class="ctab" data-ctab="team">Команда</button>
+    <button class="ctab" data-ctab="settings">Настройки</button>
+  </div>
+
+  <div class="work" id="work" data-mtab="stage" data-ctab="chat">
+    <div class="mtabs" id="mtabs" role="tablist" aria-label="Панели на узком экране"></div>
+
+    <aside class="zone zone-left" data-zone="left">
+      <div class="zoneHead"><span class="zi">◧</span>Левая панель<span class="cnt" id="cnt-left">0</span></div>
+      <div class="zoneBody" data-drop="left"></div>
+    </aside>
+
+    <div class="res vres vres-left" data-res="left" data-tip="Потяните, чтобы изменить ширину левой панели. Двойной клик — сбросить."></div>
+
+    <main class="stage" id="stage">
+      <div class="chatTop">
+        <div class="ct">
+          <div class="t">Сводка по документам</div>
+          <div class="s">обычный помощник · всё считается на этом компьютере</div>
+        </div>
+        <div class="chatTools">
+          <button aria-label="Настройки чата" data-tip="Настройки этого чата: модель, контекст, голос.">⚙</button>
+          <button aria-label="Ещё" data-tip="Ещё: экспорт, очистка, закрепление.">⋯</button>
+        </div>
+      </div>
+
+      <div class="chatScroll" id="chatScroll">
+        <div class="chatInner">
+          <div class="msgs" id="msgs">
+            <div class="msg user">Проверь папку «Загрузки» и собери короткую сводку: что появилось за неделю и что с этим делать?</div>
+            <div class="msg bot"><span class="who">Агент</span>Проверил 42 файла. Нового за неделю — 9 документов: 4 счёта (PDF), 2 договора (DOCX) и 3 фото чеков.
+
+Могу собрать сводку в один файл и разложить счета по папкам. Записать в проект?</div>
+            <div class="toolLine"><b>⚙ Инструменты</b> · прочитано 42 файла · 18 секунд</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="compWrap">
+        <div class="chatInner">
+          <div class="approveBar">
+            <span class="aWarn">⚠ Нужно разрешение</span>
+            <span class="aTxt">Записать <b>сводка.md</b> в папку проекта?</span>
+            <span class="aBtns"><button class="primary tiny">Разрешить</button><button class="ghost tiny">Отменить</button></span>
+          </div>
+          <div class="modeRow">
+            <button class="mode active" data-mode="agent">Один помощник<span class="help" data-tip="Обычный режим: отвечает одна модель. Быстро и просто для повседневных задач.">?</span></button>
+            <button class="mode" data-mode="team">Команда специалистов<span class="help" data-tip="Сложную задачу по очереди разбирают роли: аналитик, разработчик, ревьюер. Дольше, но глубже.">?</span></button>
+          </div>
+          <div class="tplRow">
+            <button class="chip" data-prompt="Собери сводку по папке «Загрузки» за неделю: новые файлы, суммы, что требует внимания.">Сводка по папке</button>
+            <button class="chip" data-prompt="Проверь код в папке проекта и предложи улучшения.">Ревью кода</button>
+            <button class="chip" data-prompt="Найди в базе знаний всё про договоры за этот год.">Найти в знаниях</button>
+            <button class="chip" data-prompt="Собери техническое задание по моему описанию.">Собрать ТЗ</button>
+          </div>
+          <div class="modelRow">
+            <span>Модель</span>
+            <select id="modelPick" aria-label="Модель">
+              <option>Qwen3 4B Instruct</option>
+              <option>Gemma 3 4B</option>
+              <option>Qwen3 8B</option>
+            </select>
+            <button class="ghost tiny">Выгрузить</button>
+            <span class="sub">8K контекст · 24 ток/с</span>
+          </div>
+          <div class="composer">
+            <button class="ghost iconBtn" id="newChat" aria-label="Новый чат" data-tip="Начать новый чат. Старый останется в списке слева.">＋</button>
+            <textarea id="input" rows="1" placeholder="Спросите что-нибудь про файлы, документы или код…"></textarea>
+            <button class="ghost iconBtn" id="attachBtn" aria-label="Прикрепить файл" data-tip="Прикрепить файл: PDF, DOCX, XLSX, CSV, текст. Можно просто перетащить в окно.">📎</button>
+            <button class="ghost iconBtn" id="micBtn" aria-label="Голос" data-tip="Голосовой ввод. Горячие клавиши: Ctrl + Alt + Space.">🎤</button>
+            <button class="primary" id="send">Отправить</button>
+          </div>
+          <div class="hint">Enter — отправить, Shift+Enter — новая строка</div>
+        </div>
+      </div>
+    </main>
+
+    <div class="res vres vres-right" data-res="right" data-tip="Потяните, чтобы изменить ширину правой панели. Двойной клик — сбросить."></div>
+
+    <aside class="zone zone-right" data-zone="right">
+      <div class="zoneHead"><span class="zi">◨</span>Правая панель<span class="cnt" id="cnt-right">0</span></div>
+      <div class="zoneBody" data-drop="right"></div>
+    </aside>
+
+    <div class="res hres" data-res="bottom" data-tip="Потяните, чтобы изменить высоту нижней шторки. Двойной клик — сбросить."></div>
+
+    <section class="zone zone-bottom" data-zone="bottom">
+      <div class="zoneHead">
+        <span class="zi">▤</span>Нижняя шторка<span class="cnt" id="cnt-bottom">0</span>
+        <button class="zBtn" id="dockCollapse" aria-label="Свернуть шторку" data-tip="Свернуть или развернуть нижнюю шторку.">▾</button>
+      </div>
+      <div class="zoneBody" data-drop="bottom"></div>
+    </section>
+
+    <div class="cph" id="cph">
+      <div class="cphCard">
+        <div class="cphIco" id="cphIco">📚</div>
+        <h3 id="cphTitle">Раздел</h3>
+        <p>В варианте C разделы открываются на весь экран. Здесь будет тот же экран, что и во вкладках приложения — без плавающих блоков, чтобы ничего не мешало.</p>
+        <button class="ghost" id="cphBack">← Вернуться в чат</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="statusbar">
+  <button class="sbBtn" id="dockBtn" data-tip="Показать или скрыть нижнюю шторку."><span id="dockChev">▾</span> Панели</button>
+  <span class="sbItem" id="sbModel">модель: <b>Qwen3 4B</b></span>
+  <span class="sbItem">ЦП 18%</span>
+  <span class="sbItem">ОЗУ 5,2 / 16 ГБ</span>
+  <span class="sbItem">1 284 ток</span>
+  <span class="sbItem">24 ток/с</span>
+  <span class="sbItem sbOk">● готов</span>
+  <span class="sbRight">порт 8765 · v0.4</span>
+</footer>
+
+<div class="tip" id="tip" role="tooltip"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<div class="modalBack" id="helpModal">
+  <div class="modal">
+    <h3>Как устроен макет</h3>
+    <p class="lead">Это рабочий макет, а не приложение. Всё сохраняется только в этом браузере.</p>
+    <ul>
+      <li><b>Переносите блоки.</b> Возьмите блок за заголовок и тяните в левую панель, правую или нижнюю шторку. Пунктирная рамка показывает, куда он встанет.</li>
+      <li><b>Меняйте размеры.</b> Тяните узкие полоски между панелями. Двойной клик по полоске возвращает исходный размер.</li>
+      <li><b>Сравните варианты.</b> Кнопки <span class="k">A</span> <span class="k">B</span> <span class="k">C</span> сверху переключают три компоновки. У каждой свои места блоков.</li>
+      <li><b>Подберите плотность.</b> «Компактно / Обычно / Просторно» меняют шрифт и отступы, не трогая палитру.</li>
+      <li><b>Сбросьте.</b> Кнопка «Сбросить» возвращает всё по умолчанию.</li>
+      <li><b>Проверьте адаптив.</b> Сузьте окно: при 1100 px правая панель уходит вниз, при 820 px панели становятся вкладками.</li>
+    </ul>
+    <div style="display:flex;justify-content:flex-end"><button class="primary" id="helpClose">Понятно</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ============ данные блоков ============ */
+const BLOCKS = {
+  model: {
+    icon:"🧠", title:"Модель",
+    tip:"Модель — «мозг» агента. Пока она не загружена, чат не отвечает. Память показывает, сколько занято.",
+    body: `
+      <div class="bRow"><span class="bName">Qwen3 4B Instruct</span><span class="badge ok">загружена</span></div>
+      <div class="kv"><span>Память модели</span><b>3,1 / 8 ГБ</b></div>
+      <div class="mbar"><i style="width:39%"></i></div>
+      <div class="bBtns"><button class="ghost tiny">Сменить</button><button class="ghost tiny">Выгрузить</button></div>`
+  },
+  resources: {
+    icon:"📊", title:"Ресурсы",
+    tip:"Сколько процессора, памяти и видеокарты занимает модель. Если память близка к пределу — выгрузите модель.",
+    body: `
+      <div class="kv"><span>Процессор</span><b>18%</b></div><div class="mbar"><i style="width:18%"></i></div>
+      <div class="kv"><span>Память</span><b>5,2 / 16 ГБ</b></div><div class="mbar"><i class="warn" style="width:33%"></i></div>
+      <div class="kv"><span>Видеокарта</span><b>1,4 / 8 ГБ</b></div><div class="mbar"><i style="width:18%"></i></div>
+      <div class="tiny">Обновляется каждые 2 секунды</div>`
+  },
+  knowledge: {
+    icon:"📚", title:"Знания",
+    tip:"База знаний: папки и файлы, которые агент уже прочитал. Поиск идёт по смыслу, без интернета.",
+    body: `
+      <div class="kv"><span>Папок в базе</span><b>12</b></div>
+      <div class="kv"><span>Файлов</span><b>1 480</b></div>
+      <input class="bInput" type="text" placeholder="Поиск по базе…" aria-label="Поиск по базе знаний">
+      <button class="ghost tiny wide">Открыть базу знаний</button>`
+  },
+  tasks: {
+    icon:"📅", title:"Задачи",
+    tip:"Задачи по расписанию. Агент выполнит их сам, результат появится в чатах.",
+    body: `
+      <div class="task"><span class="sw on" role="switch" aria-checked="true" tabindex="0"></span><span>09:00 · Сводка по «Загрузкам»</span></div>
+      <div class="task"><span class="sw on" role="switch" aria-checked="true" tabindex="0"></span><span>18:30 · Проверить почту</span></div>
+      <div class="task"><span class="sw" role="switch" aria-checked="false" tabindex="0"></span><span>20:00 · Копия базы знаний</span></div>
+      <button class="ghost tiny wide">＋ Новая задача</button>`
+  },
+  chats: {
+    icon:"💬", title:"Чаты",
+    tip:"История чатов. Всё хранится на этом компьютере и никуда не отправляется.",
+    body: `
+      <div class="listItem active"><span class="liT">Сводка по документам</span><span class="liM">сейчас</span></div>
+      <div class="listItem"><span class="liT">Ревью кода</span><span class="liM">вчера</span></div>
+      <div class="listItem"><span class="liT">Вопросы по базе</span><span class="liM">12 ноя</span></div>
+      <button class="ghost tiny wide">＋ Новый чат</button>`
+  },
+  projects: {
+    icon:"📁", title:"Проекты",
+    tip:"Рабочие папки, к которым агенту разрешено обращаться. Нажмите на папку, чтобы сделать её основной.",
+    body: `
+      <div class="proj"><div class="projT">📁 LocalAgent</div><div class="projP">C:\\Users\\volko\\LocalAgent</div></div>
+      <div class="proj"><div class="projT">📁 Загрузки</div><div class="projP">C:\\Users\\volko\\Downloads</div></div>
+      <button class="ghost tiny wide">＋ Добавить папку</button>`
+  },
+  roles: {
+    icon:"👥", title:"Роли команды",
+    tip:"Роли для режима «Команда специалистов». План сам делит задачу между ними.",
+    body: `
+      <div class="chips"><span class="roleChip">Аналитик</span><span class="roleChip">Разработчик</span><span class="roleChip">Ревьюер</span><span class="roleChip add">＋</span></div>
+      <div class="tiny">Настроить роли можно в разделе «Команда».</div>`
+  },
+  voice: {
+    icon:"🎤", title:"Голос",
+    tip:"Голосовой ввод и озвучка ответов. Работает без интернета, если скачана модель распознавания.",
+    body: `
+      <button class="micBtn"><span>🎤</span> Сказать</button>
+      <div class="tiny center">Ctrl + Alt + Space</div>
+      <label class="checkRow"><span>Озвучивать ответы</span><span class="sw" role="switch" aria-checked="false" tabindex="0"></span></label>`
+  },
+  tools: {
+    icon:"🧰", title:"Инструменты",
+    tip:"Что агенту разрешено делать. Опасные действия всегда спрашивают подтверждение.",
+    body: `
+      <label class="checkRow"><span>Файлы: читать и писать</span><span class="sw on" role="switch" aria-checked="true" tabindex="0"></span></label>
+      <label class="checkRow"><span>Командная строка</span><span class="sw" role="switch" aria-checked="false" tabindex="0"></span></label>
+      <label class="checkRow"><span>Поиск в интернете</span><span class="sw on" role="switch" aria-checked="true" tabindex="0"></span></label>
+      <label class="checkRow"><span>MCP-серверы</span><span class="sw" role="switch" aria-checked="false" tabindex="0"></span></label>
+      <div class="warnNote">⚠ Опасные действия спросят разрешение</div>`
+  },
+  now: {
+    icon:"◔", title:"Сейчас",
+    tip:"Что агент делает прямо сейчас и с какой скоростью. «Готов» — можно задавать вопрос.",
+    body: `
+      <div class="nowRow"><span class="live"></span><b>Готов к работе</b><span class="tiny">2 мин назад</span></div>
+      <div class="spark" aria-hidden="true">
+        <i style="height:30%"></i><i style="height:46%"></i><i style="height:24%"></i><i style="height:62%"></i>
+        <i style="height:40%"></i><i style="height:72%"></i><i style="height:54%"></i><i style="height:82%"></i>
+        <i style="height:64%"></i><i style="height:50%"></i><i style="height:74%"></i><i style="height:58%"></i>
+      </div>
+      <div class="kv"><span>Токенов в минуту</span><b>1 284</b></div>
+      <div class="kv"><span>Скорость</span><b>24 ток/с</b></div>
+      <div class="tiny">Последнее: сводка по 42 файлам</div>`
+  }
+};
+
+/* ============ раскладки по умолчанию ============ */
+const DEFAULTS = {
+  A:{
+    left:["model","chats","projects","roles"],
+    right:["resources","knowledge","tasks"],
+    bottom:["tools","voice","now"],
+    leftW:280, rightW:300, dockH:236
+  },
+  B:{
+    left:["model","chats","projects","roles"],
+    bottom:["resources","knowledge","tasks","tools","voice","now"],
+    leftW:300, rightW:300, dockH:260
+  },
+  C:{
+    left:["model","chats","projects","roles"],
+    right:["resources","knowledge","tasks","tools"],
+    bottom:["voice","now"],
+    leftW:280, rightW:300, dockH:236, free:{}
+  }
+};
+const ZONES = ["left","right","bottom"];
+const KEY = "localagent.mockup.layout.v1";
+
+/* ============ состояние ============ */
+let state = load();
+let drag = null;
+let toastTimer = 0;
+
+function load(){
+  let s = {};
+  try { s = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch(e){ s = {}; }
+  s.variant = ["A","B","C"].indexOf(s.variant) >= 0 ? s.variant : "A";
+  s.density = ["compact","normal","roomy"].indexOf(s.density) >= 0 ? s.density : "normal";
+  s.layouts = s.layouts || {};
+  s.collapsed = s.collapsed || {};
+  s.mtab = s.mtab || "stage";
+  s.ctab = s.ctab || "chat";
+  s.dockCollapsed = !!s.dockCollapsed;
+  s.dockOpen = !!s.dockOpen;
+  return s;
+}
+function save(){
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){}
+}
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+function $(sel, root){ return (root || document).querySelector(sel); }
+function $$(sel, root){ return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+
+function ensureLayouts(){
+  ["A","B","C"].forEach(function(v){
+    const d = DEFAULTS[v];
+    const L = state.layouts[v] = state.layouts[v] || {};
+    ZONES.forEach(function(z){
+      if (!Array.isArray(L[z])) L[z] = [];
+      L[z] = L[z].filter(function(id){ return !!BLOCKS[id]; });
+    });
+    const isEmpty = ZONES.every(function(z){ return !L[z].length; });
+    if (isEmpty){
+      ZONES.forEach(function(z){ L[z] = (d[z] || []).slice(); });
+    }
+    const seen = {};
+    ZONES.forEach(function(z){
+      L[z] = L[z].filter(function(id){
+        if (seen[id]) return false;
+        seen[id] = true;
+        return true;
+      });
+    });
+    Object.keys(BLOCKS).forEach(function(id){
+      if (seen[id]) return;
+      let zone = "left";
+      ZONES.forEach(function(z){ if ((d[z] || []).indexOf(id) >= 0) zone = z; });
+      L[zone].push(id);
+    });
+    if (typeof L.leftW !== "number") L.leftW = d.leftW;
+    if (typeof L.rightW !== "number") L.rightW = d.rightW;
+    if (typeof L.dockH !== "number") L.dockH = d.dockH;
+    if (v === "C" && (!L.free || typeof L.free !== "object")) L.free = {};
+  });
+}
+
+/* ============ разметка ============ */
+function blockHTML(id){
+  const b = BLOCKS[id];
+  return '<section class="block" data-block="' + id + '">' +
+    '<header class="blockHead">' +
+      '<span class="bIco" aria-hidden="true">' + b.icon + '</span>' +
+      '<span class="bTtl">' + b.title + '</span>' +
+      '<button class="help" type="button" data-tip="' + b.tip + '" aria-label="Подсказка: ' + b.title + '">?</button>' +
+      '<button class="chev" type="button" aria-label="Свернуть блок">▾</button>' +
+    '</header>' +
+    '<div class="blockBody">' + b.body + '</div>' +
+  '</section>';
+}
+
+function applySizes(){
+  const work = $("#work");
+  const L = state.layouts[state.variant];
+  work.style.setProperty("--leftW", L.leftW + "px");
+  work.style.setProperty("--rightW", L.rightW + "px");
+  work.style.setProperty("--dockH", (state.dockCollapsed ? 40 : L.dockH) + "px");
+}
+
+function render(){
+  const app = $("#app");
+  const work = $("#work");
+  app.dataset.variant = state.variant;
+  document.body.dataset.variant = state.variant;
+  document.body.dataset.density = state.density;
+  app.classList.toggle("dockCollapsed", !!state.dockCollapsed);
+  app.classList.toggle("dockOpen", !!state.dockOpen);
+  work.dataset.mtab = state.mtab;
+  work.dataset.ctab = state.ctab;
+
+  $$("#variantSeg button").forEach(function(b){ b.classList.toggle("active", b.dataset.variant === state.variant); });
+  $$("#densitySeg button").forEach(function(b){ b.classList.toggle("active", b.dataset.density === state.density); });
+
+  const L = state.layouts[state.variant];
+  ZONES.forEach(function(z){
+    const body = $('.zoneBody[data-drop="' + z + '"]');
+    body.innerHTML = "";
+    (L[z] || []).forEach(function(id){ body.insertAdjacentHTML("beforeend", blockHTML(id)); });
+    const cnt = $("#cnt-" + z);
+    if (cnt) cnt.textContent = (L[z] || []).length;
+  });
+
+  $$(".block").forEach(function(b){
+    if (state.collapsed[b.dataset.block]) b.classList.add("collapsed");
+  });
+
+  applySizes();
+  updateCMode();
+  if (state.variant === "C") placeFree(true);
+  renderMtabs();
+  renderCTabs();
+  updateDockUI();
+}
+
+/* ============ вариант C: свободные позиции ============ */
+function updateCMode(){
+  const list = state.variant === "C" && (window.innerWidth <= 1040 || window.innerHeight <= 860);
+  $("#app").classList.toggle("list", list);
+}
+function placeFree(init){
+  const work = $("#work");
+  const blocks = $$(".block");
+  const wide = window.innerWidth > 1040 && window.innerHeight > 860;
+  if (!wide){
+    blocks.forEach(function(b){ b.style.left = ""; b.style.top = ""; });
+    return;
+  }
+  const L = state.layouts.C;
+  const wr = work.getBoundingClientRect();
+  const fw = parseFloat(getComputedStyle(document.body).getPropertyValue("--floatW")) || 270;
+  const byId = {};
+  blocks.forEach(function(b){ byId[b.dataset.block] = b; });
+
+  if (Object.keys(L.free).length === 0){
+    let ly = 14, ry = 14;
+    DEFAULTS.C.left.forEach(function(id){
+      const el = byId[id]; if (!el) return;
+      L.free[id] = { x: 14, y: ly };
+      ly += (el.getBoundingClientRect().height || 150) + 10;
+    });
+    DEFAULTS.C.right.forEach(function(id){
+      const el = byId[id]; if (!el) return;
+      L.free[id] = { x: Math.max(14, wr.width - fw - 14), y: ry };
+      ry += (el.getBoundingClientRect().height || 150) + 10;
+    });
+    const bottomY = Math.max(14, wr.height - (byId.now ? byId.now.getBoundingClientRect().height : 150) - 14);
+    const spots = { voice: 0.28, now: 0.52 };
+    Object.keys(spots).forEach(function(id){
+      const el = byId[id]; if (!el) return;
+      L.free[id] = { x: Math.round(wr.width * spots[id]), y: bottomY };
+    });
+  }
+
+  blocks.forEach(function(b){
+    const id = b.dataset.block;
+    let p = L.free[id];
+    if (!p){
+      p = L.free[id] = { x: 14, y: 14 };
+    }
+    const h = b.getBoundingClientRect().height || 150;
+    const x = Math.max(10, Math.min(p.x, wr.width - fw - 10));
+    const y = Math.max(10, Math.min(p.y, wr.height - h - 10));
+    b.style.left = x + "px";
+    b.style.top = y + "px";
+    if (init) { p.x = x; p.y = y; }
+  });
+}
+
+/* ============ вкладки на узком экране ============ */
+function renderMtabs(){
+  const defs = state.variant === "A"
+    ? [["left","Левая"],["stage","Чат"],["right","Правая"],["bottom","Шторка"]]
+    : [["left","Левая"],["stage","Чат"],["bottom","Шторка"]];
+  if (!defs.some(function(d){ return d[0] === state.mtab; })) state.mtab = "stage";
+  const el = $("#mtabs");
+  el.innerHTML = defs.map(function(d){
+    return '<button class="mtab' + (state.mtab === d[0] ? " active" : "") + '" data-mtab="' + d[0] + '">' + d[1] + '</button>';
+  }).join("");
+  $("#work").dataset.mtab = state.mtab;
+}
+
+/* ============ вкладки варианта C ============ */
+const CTAB_INFO = {
+  models: { icon:"🧠", title:"Модели" },
+  kb:     { icon:"📚", title:"Знания" },
+  tasks:  { icon:"📅", title:"Задачи" },
+  team:   { icon:"👥", title:"Команда" },
+  settings:{ icon:"⚙", title:"Настройки" }
+};
+function renderCTabs(){
+  $$("#ctabs .ctab").forEach(function(b){ b.classList.toggle("active", b.dataset.ctab === state.ctab); });
+  const cph = $("#cph");
+  const work = $("#work");
+  work.dataset.ctab = state.ctab;
+  if (state.ctab !== "chat" && CTAB_INFO[state.ctab]){
+    $("#cphIco").textContent = CTAB_INFO[state.ctab].icon;
+    $("#cphTitle").textContent = "Раздел «" + CTAB_INFO[state.ctab].title + "»";
+    cph.classList.add("show");
+  } else {
+    cph.classList.remove("show");
+  }
+}
+
+/* ============ шторка ============ */
+function updateDockUI(){
+  const btn = $("#dockBtn");
+  const chev = $("#dockChev");
+  const narrowA = state.variant === "A" && window.innerWidth <= 1100 && window.innerWidth > 820;
+  const closed = narrowA ? !state.dockOpen : state.dockCollapsed;
+  if (chev) chev.textContent = closed ? "▴" : "▾";
+  if (btn) btn.title = closed ? "Показать нижнюю шторку" : "Скрыть нижнюю шторку";
+  const dc = $("#dockCollapse");
+  if (dc) dc.textContent = closed ? "▴" : "▾";
+  const zb = $(".zone-bottom");
+  if (zb) zb.style.display = "";
+}
+function toggleDock(){
+  if (state.variant === "C"){
+    toast("В варианте C нижней шторки нет — блоки плавают поверх.");
+    return;
+  }
+  if (window.innerWidth <= 820){
+    state.mtab = state.mtab === "bottom" ? "stage" : "bottom";
+    renderMtabs();
+    save();
+    return;
+  }
+  if (state.variant === "A" && window.innerWidth <= 1100){
+    state.dockOpen = !state.dockOpen;
+    $("#app").classList.toggle("dockOpen", state.dockOpen);
+    updateDockUI();
+    save();
+    return;
+  }
+  state.dockCollapsed = !state.dockCollapsed;
+  applySizes();
+  updateDockUI();
+  save();
+}
+
+/* ============ перетаскивание блоков ============ */
+function onPointerDown(e){
+  if (e.button !== undefined && e.button !== 0) return;
+  const head = e.target.closest(".blockHead");
+  if (!head) return;
+  if (e.target.closest("button,input,select,textarea,a,label")) return;
+  const block = head.closest(".block");
+  if (!block) return;
+  const r = block.getBoundingClientRect();
+  drag = {
+    block: block,
+    id: block.dataset.block,
+    head: head,
+    sx: e.clientX,
+    sy: e.clientY,
+    ox: e.clientX - r.left,
+    oy: e.clientY - r.top,
+    moved: false,
+    ph: null,
+    originParent: block.parentNode,
+    originNext: block.nextSibling,
+    pointerId: e.pointerId
+  };
+  try { head.setPointerCapture(e.pointerId); } catch(err){}
+  e.preventDefault();
+  hideTip();
+  window.addEventListener("pointermove", onPointerMove, { passive:false });
+  window.addEventListener("pointerup", onPointerUp);
+  window.addEventListener("pointercancel", onPointerUp);
+  window.addEventListener("keydown", onKeyDown);
+}
+
+function onPointerMove(e){
+  if (!drag) return;
+  if (!drag.moved){
+    if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 5) return;
+    startDrag();
+  }
+  e.preventDefault();
+  const b = drag.block;
+  const w = b.offsetWidth, h = b.offsetHeight;
+  let left = e.clientX - drag.ox;
+  let top = e.clientY - drag.oy;
+  left = Math.max(-w * 0.4, Math.min(left, window.innerWidth - w * 0.6));
+  top = Math.max(0, Math.min(top, window.innerHeight - 40));
+  b.style.left = left + "px";
+  b.style.top = top + "px";
+  if (state.variant === "C") return;
+  updateDropTarget(e.clientX, e.clientY);
+}
+
+function startDrag(){
+  drag.moved = true;
+  const b = drag.block;
+  const r = b.getBoundingClientRect();
+  document.body.classList.add("dragging");
+  b.classList.add("isDragging");
+  b.style.width = r.width + "px";
+  b.style.height = r.height + "px";
+  b.style.left = r.left + "px";
+  b.style.top = r.top + "px";
+
+  if (state.variant !== "C"){
+    const ph = document.createElement("div");
+    ph.className = "blockPh";
+    ph.style.height = r.height + "px";
+    drag.ph = ph;
+    b.parentNode.insertBefore(ph, b);
+  }
+  document.body.appendChild(b);
+}
+
+function updateDropTarget(x, y){
+  const el = document.elementFromPoint(x, y);
+  const zone = el ? el.closest("[data-drop]") : null;
+  $$(".zone").forEach(function(z){ z.classList.remove("over"); });
+  $$(".zoneBody").forEach(function(z){ z.classList.remove("over"); });
+  if (!zone) return;
+  zone.classList.add("over");
+  const z = zone.closest(".zone");
+  if (z) z.classList.add("over");
+  insertPlaceholder(zone, x, y);
+}
+
+function insertPlaceholder(zone, x, y){
+  if (!drag || !drag.ph) return;
+  const items = $$(".block", zone);
+  if (!items.length){
+    zone.appendChild(drag.ph);
+    return;
+  }
+  let best = null, bestD = Infinity, bestR = null;
+  items.forEach(function(el){
+    const r = el.getBoundingClientRect();
+    const d = Math.hypot((x - (r.left + r.width / 2)) * 0.7, y - (r.top + r.height / 2));
+    if (d < bestD){ bestD = d; best = el; bestR = r; }
+  });
+  if (!best){ zone.appendChild(drag.ph); return; }
+  const dx = x - (bestR.left + bestR.width / 2);
+  const dy = y - (bestR.top + bestR.height / 2);
+  const after = Math.abs(dx) > Math.abs(dy) ? dx > 0 : dy > 0;
+  if (after) best.after(drag.ph); else best.before(drag.ph);
+}
+
+function onPointerUp(){
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  window.removeEventListener("pointermove", onPointerMove);
+  window.removeEventListener("pointerup", onPointerUp);
+  window.removeEventListener("pointercancel", onPointerUp);
+  window.removeEventListener("keydown", onKeyDown);
+  try { d.head.releasePointerCapture(d.pointerId); } catch(err){}
+  document.body.classList.remove("dragging");
+  $$(".zone").forEach(function(z){ z.classList.remove("over"); });
+  $$(".zoneBody").forEach(function(z){ z.classList.remove("over"); });
+
+  if (!d.moved) return;
+
+  d.block.classList.remove("isDragging");
+  d.block.style.width = "";
+  d.block.style.height = "";
+
+  if (state.variant === "C"){
+    const work = $("#work");
+    const wr = work.getBoundingClientRect();
+    const fixed = d.block.getBoundingClientRect();
+    const fw = d.block.offsetWidth;
+    const fh = d.block.offsetHeight;
+    const x = Math.max(10, Math.min(fixed.left - wr.left, wr.width - fw - 10));
+    const y = Math.max(10, Math.min(fixed.top - wr.top, wr.height - fh - 10));
+    d.block.style.left = x + "px";
+    d.block.style.top = y + "px";
+    state.layouts.C.free[d.id] = { x: x, y: y };
+  } else {
+    if (d.ph && d.ph.parentNode){
+      d.ph.parentNode.insertBefore(d.block, d.ph);
+      d.ph.remove();
+    } else {
+      d.originParent.insertBefore(d.block, d.originNext);
+    }
+    d.block.style.left = "";
+    d.block.style.top = "";
+    commitZones();
+  }
+  save();
+  toast("Блок «" + BLOCKS[d.id].title + "» перенесён");
+}
+
+function cancelDrag(){
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  window.removeEventListener("pointermove", onPointerMove);
+  window.removeEventListener("pointerup", onPointerUp);
+  window.removeEventListener("pointercancel", onPointerUp);
+  window.removeEventListener("keydown", onKeyDown);
+  document.body.classList.remove("dragging");
+  $$(".zone").forEach(function(z){ z.classList.remove("over"); });
+  $$(".zoneBody").forEach(function(z){ z.classList.remove("over"); });
+  d.block.classList.remove("isDragging");
+  d.block.style.width = ""; d.block.style.height = "";
+  d.block.style.left = ""; d.block.style.top = "";
+  if (d.ph) d.ph.remove();
+  d.originParent.insertBefore(d.block, d.originNext);
+}
+
+function onKeyDown(e){
+  if (e.key === "Escape"){ e.preventDefault(); cancelDrag(); }
+}
+
+function commitZones(){
+  const L = state.layouts[state.variant];
+  ZONES.forEach(function(z){
+    const body = $('.zoneBody[data-drop="' + z + '"]');
+    if (!body) return;
+    L[z] = $$(":scope > .block", body).map(function(b){ return b.dataset.block; });
+    const cnt = $("#cnt-" + z);
+    if (cnt) cnt.textContent = L[z].length;
+  });
+}
+
+/* ============ разделители ============ */
+function initResizers(){
+  $$(".res").forEach(function(res){
+    res.addEventListener("pointerdown", function(e){
+      if (e.button !== 0) return;
+      const kind = res.dataset.res;
+      if (state.variant === "C") return;
+      const L = state.layouts[state.variant];
+      if (kind === "right" && state.variant !== "A") return;
+      const start = {
+        kind: kind, x: e.clientX, y: e.clientY,
+        leftW: L.leftW, rightW: L.rightW, dockH: L.dockH
+      };
+      res.classList.add("active");
+      document.body.style.cursor = kind === "bottom" ? "row-resize" : "col-resize";
+      try { res.setPointerCapture(e.pointerId); } catch(err){}
+      e.preventDefault();
+      hideTip();
+
+      function move(ev){
+        const dx = ev.clientX - start.x;
+        const dy = ev.clientY - start.y;
+        if (kind === "left"){
+          L.leftW = Math.max(200, Math.min(440, start.leftW + dx));
+        } else if (kind === "right"){
+          L.rightW = Math.max(220, Math.min(480, start.rightW - dx));
+        } else {
+          const maxH = Math.max(160, window.innerHeight * 0.55);
+          L.dockH = Math.max(120, Math.min(maxH, start.dockH - dy));
+          state.dockCollapsed = false;
+        }
+        applySizes();
+        updateDockUI();
+        if (state.variant === "C") placeFree(false);
+      }
+      function up(){
+        res.classList.remove("active");
+        document.body.style.cursor = "";
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        window.removeEventListener("pointercancel", up);
+        save();
+      }
+      window.addEventListener("pointermove", move, { passive:false });
+      window.addEventListener("pointerup", up);
+      window.addEventListener("pointercancel", up);
+    });
+    res.addEventListener("dblclick", function(){
+      const L = state.layouts[state.variant];
+      const kind = res.dataset.res;
+      if (kind === "left") L.leftW = DEFAULTS[state.variant].leftW;
+      if (kind === "right") L.rightW = DEFAULTS[state.variant].rightW;
+      if (kind === "bottom"){ L.dockH = DEFAULTS[state.variant].dockH; state.dockCollapsed = false; }
+      applySizes();
+      updateDockUI();
+      save();
+      toast("Размер возвращён");
+    });
+  });
+}
+
+/* ============ подсказки ============ */
+const tip = $("#tip");
+let tipEl = null;
+function showTip(el){
+  if (!el || !el.dataset.tip) return;
+  tipEl = el;
+  tip.textContent = el.dataset.tip;
+  tip.classList.add("show");
+  const r = el.getBoundingClientRect();
+  const tw = tip.offsetWidth, th = tip.offsetHeight;
+  let x = r.left + r.width / 2 - tw / 2;
+  let y = r.top - th - 8;
+  if (y < 6) y = r.bottom + 8;
+  x = Math.max(8, Math.min(x, window.innerWidth - tw - 8));
+  y = Math.max(6, Math.min(y, window.innerHeight - th - 6));
+  tip.style.left = x + "px";
+  tip.style.top = y + "px";
+}
+function hideTip(){
+  tip.classList.remove("show");
+  tipEl = null;
+}
+function initTips(){
+  document.addEventListener("pointerover", function(e){
+    const el = e.target.closest("[data-tip]");
+    if (!el) return;
+    if (e.relatedTarget && el.contains(e.relatedTarget)) return;
+    showTip(el);
+  });
+  document.addEventListener("pointerout", function(e){
+    const el = e.target.closest("[data-tip]");
+    if (!el) return;
+    if (e.relatedTarget && el.contains(e.relatedTarget)) return;
+    hideTip();
+  });
+  document.addEventListener("focusin", function(e){
+    const el = e.target.closest("[data-tip]");
+    if (el) showTip(el);
+  });
+  document.addEventListener("focusout", hideTip);
+  window.addEventListener("scroll", hideTip, true);
+  window.addEventListener("resize", hideTip);
+  document.addEventListener("pointerdown", function(e){
+    if (!e.target.closest("[data-tip]")) hideTip();
+  }, true);
+}
+
+/* ============ мелочи интерфейса ============ */
+function toast(msg){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 1900);
+}
+
+function initUI(){
+  $("#variantSeg").addEventListener("click", function(e){
+    const b = e.target.closest("button[data-variant]");
+    if (!b || b.dataset.variant === state.variant) return;
+    state.variant = b.dataset.variant;
+    state.mtab = "stage";
+    render();
+    save();
+    const names = { A:"A · две панели", B:"B · шторка", C:"C · плавающие блоки" };
+    toast("Вариант " + names[state.variant]);
+  });
+
+  $("#densitySeg").addEventListener("click", function(e){
+    const b = e.target.closest("button[data-density]");
+    if (!b) return;
+    state.density = b.dataset.density;
+    document.body.dataset.density = state.density;
+    $$("#densitySeg button").forEach(function(x){ x.classList.toggle("active", x === b); });
+    if (state.variant === "C") requestAnimationFrame(function(){ placeFree(false); });
+    save();
+  });
+
+  $("#resetBtn").addEventListener("click", function(){
+    state.layouts = clone(DEFAULTS);
+    state.collapsed = {};
+    state.density = "normal";
+    state.dockCollapsed = false;
+    state.dockOpen = false;
+    state.mtab = "stage";
+    state.ctab = "chat";
+    ensureLayouts();
+    render();
+    save();
+    toast("Раскладка возвращена по умолчанию");
+  });
+
+  $("#helpBtn").addEventListener("click", function(){ $("#helpModal").classList.add("show"); });
+  $("#helpClose").addEventListener("click", function(){ $("#helpModal").classList.remove("show"); });
+  $("#helpModal").addEventListener("click", function(e){ if (e.target === this) this.classList.remove("show"); });
+
+  $("#dockBtn").addEventListener("click", toggleDock);
+  $("#dockCollapse").addEventListener("click", toggleDock);
+
+  $("#mtabs").addEventListener("click", function(e){
+    const b = e.target.closest("[data-mtab]");
+    if (!b) return;
+    state.mtab = b.dataset.mtab;
+    $("#work").dataset.mtab = state.mtab;
+    $$("#mtabs .mtab").forEach(function(x){ x.classList.toggle("active", x === b); });
+    save();
+  });
+
+  $("#ctabs").addEventListener("click", function(e){
+    const b = e.target.closest("[data-ctab]");
+    if (!b) return;
+    state.ctab = b.dataset.ctab;
+    renderCTabs();
+    save();
+  });
+  $("#cphBack").addEventListener("click", function(){
+    state.ctab = "chat";
+    renderCTabs();
+    save();
+  });
+
+  document.addEventListener("click", function(e){
+    const chev = e.target.closest(".chev");
+    if (chev){
+      const b = chev.closest(".block");
+      b.classList.toggle("collapsed");
+      chev.textContent = b.classList.contains("collapsed") ? "▸" : "▾";
+      state.collapsed[b.dataset.block] = b.classList.contains("collapsed");
+      save();
+      return;
+    }
+    const sw = e.target.closest(".sw");
+    if (sw){
+      sw.classList.toggle("on");
+      sw.setAttribute("aria-checked", sw.classList.contains("on") ? "true" : "false");
+      return;
+    }
+    const row = e.target.closest(".checkRow");
+    if (row && !e.target.closest(".sw")){
+      const s = row.querySelector(".sw");
+      if (s){ s.classList.toggle("on"); s.setAttribute("aria-checked", s.classList.contains("on") ? "true" : "false"); }
+      return;
+    }
+    const item = e.target.closest(".listItem");
+    if (item && item.parentNode){
+      $$(".listItem", item.parentNode).forEach(function(x){ x.classList.remove("active"); });
+      item.classList.add("active");
+      return;
+    }
+    const proj = e.target.closest(".proj");
+    if (proj && proj.parentNode){
+      $$(".proj", proj.parentNode).forEach(function(x){ x.style.borderColor = ""; });
+      proj.style.borderColor = "var(--accent)";
+      return;
+    }
+    const mode = e.target.closest(".mode");
+    if (mode){
+      $$(".mode", mode.parentNode).forEach(function(x){ x.classList.remove("active"); });
+      mode.classList.add("active");
+      return;
+    }
+    const chip = e.target.closest(".chip");
+    if (chip && chip.dataset.prompt){
+      const input = $("#input");
+      input.value = chip.dataset.prompt;
+      input.focus();
+      autoGrow();
+      return;
+    }
+  });
+
+  document.addEventListener("pointerdown", onPointerDown);
+
+  /* чат-демо */
+  const input = $("#input");
+  function autoGrow(){
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 150) + "px";
+  }
+  input.addEventListener("input", autoGrow);
+  input.addEventListener("keydown", function(e){
+    if (e.key === "Enter" && !e.shiftKey){ e.preventDefault(); send(); }
+  });
+  $("#send").addEventListener("click", send);
+  $("#newChat").addEventListener("click", function(){ toast("Новый чат — в макете только кнопка"); });
+  $("#attachBtn").addEventListener("click", function(){ toast("В макете файлы не прикрепляются"); });
+  $("#micBtn").addEventListener("click", function(){ toast("Голосовой ввод — в макете только кнопка"); });
+  $("#cph").addEventListener("click", function(e){ if (e.target === this){ state.ctab = "chat"; renderCTabs(); } });
+
+  function send(){
+    const text = input.value.trim();
+    if (!text) return;
+    const msgs = $("#msgs");
+    const u = document.createElement("div");
+    u.className = "msg user";
+    u.textContent = text;
+    msgs.appendChild(u);
+    input.value = "";
+    autoGrow();
+    scrollChat();
+    setTimeout(function(){
+      const b = document.createElement("div");
+      b.className = "msg bot";
+      b.innerHTML = '<span class="who">Агент</span>Это макет. Здесь появится ответ модели — без интернета, на этом компьютере.';
+      msgs.appendChild(b);
+      scrollChat();
+    }, 550);
+  }
+  function scrollChat(){
+    const s = $("#chatScroll");
+    s.scrollTop = s.scrollHeight;
+  }
+
+  window.addEventListener("resize", function(){
+    updateDockUI();
+    if (state.variant === "C"){
+      updateCMode();
+      requestAnimationFrame(function(){ placeFree(false); });
+    }
+  });
+}
+
+/* ============ запуск ============ */
+ensureLayouts();
+initResizers();
+initTips();
+initUI();
+render();
+save();
+})();
+</script>
+</body>
+</html>

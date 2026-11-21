@@ -39,20 +39,6 @@ async function loadState() {
   return STATE;
 }
 
-function setStatus() {
-  const dot = $("dot");
-  const text = $("statusText");
-  dot.className = "dot";
-  if (BUSY) {
-    dot.className = "dot busy";
-    text.textContent = "думает…";
-  } else if (STATE && STATE.server.running) {
-    dot.className = "dot on";
-    text.textContent = "модель загружена";
-  } else {
-    text.textContent = "не загружена";
-  }
-}
 
 
 function esc(t) { return String(t === null || t === undefined ? '' : t).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&#34;',"'":'&#39;'}[c]; }); }
@@ -776,7 +762,7 @@ let STATS = null;
 
 function bar(percent, cls) {
   const value = Math.max(0, Math.min(100, Number(percent) || 0));
-  return '<div class="bar"><i class="' + (cls || '') + '" style="width:' + value + '%"></i></div>';
+  return '<div class="meter"><i class="' + (cls || '') + '" style="width:' + value + '%"></i></div>';
 }
 
 function renderStats() {
@@ -834,11 +820,6 @@ async function pollStats() {
   } catch (err) {
     return;
   }
-}
-
-function toggleSide(which) {
-  const side = document.getElementById(which === 'left' ? 'leftSide' : 'rightSide');
-  if (side) side.classList.toggle('collapsed');
 }
 
 function renderProjects() {
@@ -925,6 +906,38 @@ async function deleteChat(id) {
   await fetch('/api/chats/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: id }) });
   if (id === CURRENT_CHAT) newChat();
   await loadState();
+}
+
+function wireDrawerHeight() {
+  const drawer = document.getElementById('drawer');
+  const handle = document.getElementById('drawerResize');
+  if (!drawer || !handle) return;
+  const saved = parseInt(localStorage.getItem('agentDrawerH') || '0', 10);
+  if (saved > 120) drawer.style.setProperty('--drawer-h', saved + 'px');
+  let startY = 0;
+  let startH = 0;
+  let dragging = false;
+  const onMove = function (event) {
+    if (!dragging) return;
+    const height = Math.max(120, Math.min(window.innerHeight * 0.7, startH - (event.clientY - startY)));
+    drawer.style.setProperty('--drawer-h', Math.round(height) + 'px');
+  };
+  const onUp = function () {
+    if (!dragging) return;
+    dragging = false;
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    const height = parseInt(getComputedStyle(drawer).height, 10) || 0;
+    if (height) localStorage.setItem('agentDrawerH', String(height));
+  };
+  handle.addEventListener('pointerdown', function (event) {
+    dragging = true;
+    startY = event.clientY;
+    startH = parseInt(getComputedStyle(drawer).height, 10) || 240;
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    event.preventDefault();
+  });
 }
 
 function toggleDrawer() {
@@ -1024,6 +1037,14 @@ function renderVoice() {
   if (tts) tts.addEventListener('change', saveVoiceTts);
   const picker = document.getElementById('voiceModel');
   if (picker) picker.addEventListener('change', saveVoiceModel);
+}
+
+async function saveVoiceModel(event) {
+  const name = event && event.target ? event.target.value : '';
+  if (!name) return;
+  const res = await postJson('/api/voice/model', { name: name });
+  toast(res && res.ok === false ? ('Не вышло: ' + ((res && res.error) || 'ошибка')) : 'Модель распознавания выбрана');
+  await loadState();
 }
 
 async function saveVoiceTts(event) {
@@ -1224,16 +1245,7 @@ async function loadModelDirect(path) {
   }
 }
 
-async function unloadDirect() {
-  await postJson('/api/model/unload', {});
-  toast('Модель выгружена');
-  await loadState();
-}
 
-function modelLabel(item) {
-  const name = String(item.file || item.id || '');
-  return name.length > 34 ? name.slice(0, 31) + '…' : name;
-}
 
 function renderAdvice() {
   const box = document.getElementById('modelAdvice');
@@ -1326,16 +1338,76 @@ async function checkUpdates() {
     : ('У вас последняя версия ' + res.current);
 }
 
+const SKINS = ['graphite', 'ocean', 'sand'];
+
+function currentSkin() {
+  const saved = localStorage.getItem('agentSkin') || 'graphite';
+  return SKINS.indexOf(saved) >= 0 ? saved : 'graphite';
+}
+
+function systemLight() {
+  try {
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+  } catch (error) {
+    return false;
+  }
+}
+
+function currentMode() {
+  const saved = localStorage.getItem('agentTheme') || 'auto';
+  if (saved === 'auto') return systemLight() ? 'light' : 'dark';
+  return saved === 'light' ? 'light' : 'dark';
+}
+
 function applyLook() {
-  const theme = localStorage.getItem('agentTheme') || 'dark';
+  const skin = currentSkin();
+  const mode = currentMode();
   const font = localStorage.getItem('agentFont') || '15';
-  document.body.classList.toggle('light', theme === 'light');
+  document.body.classList.remove('skin-graphite', 'skin-ocean', 'skin-sand');
+  document.body.classList.add('skin-' + skin);
+  document.body.classList.toggle('light', mode === 'light');
+  const density = localStorage.getItem('agentDensity') || 'normal';
+  document.body.classList.remove('density-compact', 'density-roomy');
+  if (density !== 'normal') document.body.classList.add('density-' + density);
+  const densitySelect = document.getElementById('gearDensity');
+  if (densitySelect) densitySelect.value = density;
   document.body.classList.toggle('bigFont', font === '17');
   document.body.classList.toggle('hugeFont', font === '19');
+  document.querySelectorAll('.skinCard').forEach(function (card) {
+    card.classList.toggle('active', card.dataset.skin === skin);
+  });
   const themeSelect = document.getElementById('gearTheme');
   const fontSelect = document.getElementById('gearFont');
-  if (themeSelect) themeSelect.value = theme;
+  if (themeSelect) themeSelect.value = localStorage.getItem('agentTheme') || 'auto';
   if (fontSelect) fontSelect.value = font;
+}
+
+function wireDensity() {
+  const select = document.getElementById('gearDensity');
+  if (!select) return;
+  select.addEventListener('change', function () {
+    localStorage.setItem('agentDensity', select.value);
+    applyLook();
+  });
+}
+
+function wireSkins() {
+  document.querySelectorAll('.skinCard').forEach(function (card) {
+    card.addEventListener('click', function () {
+      localStorage.setItem('agentSkin', card.dataset.skin);
+      applyLook();
+    });
+  });
+  try {
+    const media = window.matchMedia('(prefers-color-scheme: light)');
+    if (media && media.addEventListener) {
+      media.addEventListener('change', function () {
+        if ((localStorage.getItem('agentTheme') || 'auto') === 'auto') applyLook();
+      });
+    }
+  } catch (error) {
+    return;
+  }
 }
 
 function wireResizers() {
@@ -1385,6 +1457,10 @@ function wireGear() {
   if (box) box.onclick = function (event) { if (event.target === box) box.classList.remove('show'); };
   const check = document.getElementById('gearCheck');
   if (check) check.onclick = checkUpdates;
+  const taskSave = document.getElementById('taskSave');
+  if (taskSave) taskSave.addEventListener('click', saveTask);
+  const tgSave = document.getElementById('tgSave');
+  if (tgSave) tgSave.addEventListener('click', saveTelegram);
   const data = document.getElementById('gearData');
   if (data) data.onclick = function () { postJson('/api/open', { path: window.__dataDir || '' }); };
   const prov = document.getElementById('gearProviders');
@@ -1399,7 +1475,7 @@ function wireGear() {
   if (font) font.onchange = function () { localStorage.setItem('agentFont', font.value); applyLook(); };
   const trayBox = document.getElementById('gearTray');
   if (trayBox) {
-    trayBox.checked = !!(STATE.settings && STATE.settings.tray);
+    trayBox.checked = !!(STATE && STATE.settings && STATE.settings.tray);
     trayBox.onchange = async function () {
       await postJson('/api/settings', { tray: trayBox.checked });
       toast('Готово. Изменение применится после перезапуска');
@@ -1828,9 +1904,9 @@ async function kbRemove(path) {
 async function kbOpen(path) {
   try {
     var res = await postJson('/api/open', { path: path });
-    if (res && res.ok === false) toast('Не уда|лось от|крыть');
+    if (res && res.ok === false) toast('Не удалось открыть');
   } catch (error) {
-    toast('Не уда|лось от|крыть');
+    toast('Не удалось открыть');
   }
 }
 
@@ -1855,24 +1931,24 @@ async function kbAdd() {
   var status = document.getElementById('kbStatus');
   var button = document.getElementById('kbAdd');
   var path = ((input && input.value) || '').trim();
-  if (!path) { toast('Пу|ть не у|казан'); return; }
-  if (status) status.textContent = 'Ин|дексирую…';
+  if (!path) { toast('Путь не указан'); return; }
+  if (status) status.textContent = 'Индексирую…';
   if (button) button.disabled = true;
   try {
     var res = await postJson('/api/rag/add', { path: path });
     if (res && res.started) {
-      if (status) status.textContent = 'Ин|дексирую… э|то мо|жет зан|ять мин|уту';
+      if (status) status.textContent = 'Индексирую… это может занять минуту';
       res = await waitJob('rag_add');
     }
     if (res && res.ok) {
-      if (status) status.textContent = 'Го|тово: фа|йлов ' + (res.files || 0) + ', фрагментов ' + (res.chunks || 0);
+      if (status) status.textContent = 'Готово: файлов ' + (res.files || 0) + ', фрагментов ' + (res.chunks || 0);
       if (input) input.value = '';
       await loadKB();
     } else if (status) {
-      status.textContent = (res && res.error) || 'Не пол|училось';
+      status.textContent = (res && res.error) || 'Не получилось';
     }
   } catch (error) {
-    if (status) status.textContent = 'Ош|ибка: ' + String(error && error.message || error);
+    if (status) status.textContent = 'Ошибка: ' + String(error && error.message || error);
   } finally {
     if (button) button.disabled = false;
   }
@@ -2212,12 +2288,16 @@ function wireModels() {
 function bootStep(name, fn) {
   try { fn(); } catch (error) { console.error('boot:' + name, error); }
 }
+bootStep('look', applyLook);
 bootStep('resizers', wireResizers);
 bootStep('gear', wireGear);
 bootStep('autostart', loadAutostart);
 bootStep('hf', wireModels);
 bootStep('attach', wireAttach);
 bootStep('modelPicker', wireModelPicker);
+bootStep('skins', wireSkins);
+bootStep('density', wireDensity);
+bootStep('drawerHeight', wireDrawerHeight);
 bootStep('drop', wireDrop);
 bootStep('embeddings', wireEmbeddings);
 loadState().catch(function (err) { toast('Не удалось получить состояние: ' + err.message); });

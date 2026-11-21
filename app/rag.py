@@ -70,8 +70,10 @@ def _conn() -> sqlite3.Connection:
         """
     )
     try:
-        conn.execute("ALTER TABLE chunks ADD COLUMN vec_kind TEXT DEFAULT ''")
-    except sqlite3.OperationalError as exc:
+        columns = [row[1] for row in conn.execute("PRAGMA table_info(chunks)").fetchall()]
+        if "vec_kind" not in columns:
+            conn.execute("ALTER TABLE chunks ADD COLUMN vec_kind TEXT DEFAULT ''")
+    except sqlite3.Error as exc:
         diag.warn("rag.py:alter", exc)
     try:
         if conn.execute("SELECT count(*) FROM chunks_fts").fetchone()[0] == 0:

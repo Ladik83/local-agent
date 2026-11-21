@@ -789,9 +789,12 @@ def run(port: int = 7867, open_browser: bool = True):
         if not _alive(candidate):
             port = candidate
             break
-    httpd = Server((HOST, port), Handler)
+    bind_host = "0.0.0.0" if config.load().get("lan_access") else HOST
+    httpd = Server((bind_host, port), Handler)
     httpd.daemon_threads = True
     url = "http://" + HOST + ":%d/" % httpd.server_port
+    if bind_host != HOST:
+        print("доступ по локальной сети включён, слушаем " + bind_host, flush=True)
     print(url, flush=True)
     icon = None
     try:

@@ -135,11 +135,15 @@ def load() -> dict:
             cfg.update(json.loads(SETTINGS_PATH.read_text(encoding="utf-8")))
     except (OSError, ValueError) as exc:
         diag.warn("config.py:130", exc)
-    if not cfg.get("models_dir") or not cfg.get("extra_dirs"):
+    if not cfg.get("models_dir"):
         primary, extras = autodetect_dirs()
-        cfg["models_dir"] = cfg.get("models_dir") or primary
+        cfg["models_dir"] = primary
         if not cfg.get("extra_dirs"):
-            cfg["extra_dirs"] = [item for item in extras if item != cfg["models_dir"]]
+            cfg["extra_dirs"] = [item for item in extras if item != primary]
+        try:
+            SETTINGS_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+        except OSError as exc:
+            diag.warn("config.py:autodetect", exc)
     _cfg = cfg
     return cfg
 

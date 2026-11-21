@@ -56,7 +56,6 @@
  <button id="micBtn" class="ghost" title="Голос: Ctrl+Alt+Space">🎤</button>
  <button id="send" class="primary" title="Отправить">Отправить</button>
  </div>
- <div class="hint">Enter — отправить, Shift+Enter — новая строка</div>
  </section>
 
  <section id="view-models" class="view">
@@ -219,6 +218,7 @@
 </main>
 
 <div class="drawer" id="drawer">
+ <div class="drawerResize" id="drawerResize" title="Потяните, чтобы изменить высоту"></div>
  <div class="drawerGrid">
   <div class="drawerCol">
    <h4>Проекты и рабочие папки</h4>
@@ -264,7 +264,13 @@
    <div class="sub" id="gearUpdateText"></div>
   </div>
   <div class="panel">
-   <div class="row"><span>Тема</span><select id="gearTheme"><option value="dark">тёмная</option><option value="light">светлая</option></select></div>
+   <div class="row"><span>Скин</span><span class="skinRow" id="skinRow">
+  <button class="skinCard" data-skin="graphite" title="Нейтральный графит: спокойный, для работы днём и вечером" style="--swatch-a:#5b8cff;--swatch-b:#171a21"><i></i>Графит</button>
+  <button class="skinCard" data-skin="ocean" title="Холодный синий: меньше устают глаза вечером" style="--swatch-a:#35b6d6;--swatch-b:#10202a"><i></i>Океан</button>
+  <button class="skinCard" data-skin="sand" title="Тёплый песок: мягкий фон, удобно читать" style="--swatch-a:#e0a24a;--swatch-b:#211a15"><i></i>Песок</button>
+ </span></div>
+ <div class="row"><span>Тема</span><select id="gearTheme"><option value="auto">как в системе</option><option value="dark">тёмная</option><option value="light">светлая</option></select></div>
+ <div class="row"><span>Плотность</span><select id="gearDensity"><option value="compact">компактно</option><option value="normal">обычно</option><option value="roomy">просторно</option></select></div>
    <div class="row"><span>Размер текста</span><select id="gearFont"><option value="15">обычный</option><option value="17">крупный</option><option value="19">очень крупный</option></select></div>
   </div>
   <div class="panel">

@@ -109,7 +109,7 @@
 
   function barHtml(percent, cls) {
     var value = clamp(num(percent, 0));
-    return '<div class="bar"><i class="' + esc(cls || '') + '" style="width:' + value + '%"></i></div>';
+    return '<div class="meter"><i class="' + esc(cls || '') + '" style="width:' + value + '%"></i></div>';
   }
 
   function placeholder(box, message) {
