@@ -388,7 +388,8 @@ def start_embed(model_path: str) -> dict:
     port = free_port(8190)
     log_path = config.LOGS_DIR / "llama-embed.log"
     cmd = [exe, "-m", path, "--host", "127.0.0.1", "--port", str(port),
-           "-c", "2048", "-ngl", "99", "--no-warmup", "--embeddings", "--pooling", "mean"]
+           "-c", "2048", "-b", "2048", "-ub", "2048",
+           "-ngl", "99", "--no-warmup", "--embeddings", "--pooling", "mean"]
     handle = open(str(log_path), "w", encoding="utf-8", errors="replace")
     try:
         proc = subprocess.Popen(cmd, stdout=handle, stderr=subprocess.STDOUT,

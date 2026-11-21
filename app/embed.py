@@ -108,6 +108,14 @@ def reset() -> None:
     STATE.update(mode=None, dim=0, error=None)
 
 
+def vector_kind() -> str:
+    """Метка вектора: по ней видно, какая модель его посчитала."""
+    path = find_model()
+    if not path:
+        return "sem"
+    return "sem:" + pathlib.Path(path).stem
+
+
 def status() -> dict:
     path = find_model()
     running = bool(engine.embed_base_url())

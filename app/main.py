@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from . import diag
 
+import ipaddress
 import json
 import mimetypes
 import os
@@ -212,7 +213,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def _host_ok(self) -> bool:
         host = (self.headers.get("Host") or "").split(":")[0].strip().lower()
-        return host in ("", "127.0.0.1", "localhost", "[::1]")
+        if host in ("", "127.0.0.1", "localhost", "[::1]"):
+            return True
+        if not config.load().get("lan_access"):
+            return False
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            return False
+        return address.is_private or address.is_loopback
 
     def _need_token(self) -> bool:
         route = urllib.parse.urlparse(self.path).path

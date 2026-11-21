@@ -104,13 +104,17 @@ def _hash_vector(text: str) -> list[float]:
 
 
 def embed(text: str, kind: str = "document"):
-    try:
-        from . import embed as _semantic
-        vectors = _semantic.vectors([text], kind=kind)
+    from . import embed as _semantic
+    for attempt in (1, 2):
+        try:
+            vectors = _semantic.vectors([text], kind=kind)
+        except Exception as exc:
+            diag.warn("rag/embed", exc)
+            vectors = None
         if vectors and vectors[0]:
-            return [round(float(value), 6) for value in vectors[0]], "sem"
-    except Exception as exc:
-        diag.warn("rag/embed", exc)
+            return [round(float(value), 6) for value in vectors[0]], _semantic.vector_kind()
+        if attempt == 1:
+            time.sleep(0.6)
     return _hash_vector(text), "hash"
 
 
