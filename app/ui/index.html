@@ -27,7 +27,6 @@
 
 <main>
  <section id="view-chat" class="view active">
- <div id="chatBar" class="chatBar"></div>
  <div id="messages" class="messages"></div>
  <div class="modes">
  <button class="mode active" data-mode="agent">Один помощник<span class="help" data-tip="Обычный режим: на ваш вопрос отвечает одна модель. Быстро и просто — для повседневных задач.">?</span></button>
@@ -41,6 +40,13 @@
  </div>
  <div class="attachBar" id="attachBar"></div>
  <div class="dropHint" id="dropHint">Перетащите файл сюда: PDF, DOCX, XLSX, CSV, текст</div>
+ <div class="modelRow">
+  <span class="modelLabel">Модель</span>
+  <select id="modelPick" class="modelPick" title="Выберите модель и загрузите её в память"></select>
+  <button id="modelLoadBtn" class="ghost tiny">Загрузить</button>
+  <button id="modelUnloadBtn" class="ghost tiny" style="display:none">Выгрузить</button>
+  <span class="sub" id="modelHint"></span>
+ </div>
  <div id="composer" class="composer">
  <textarea id="input" rows="1" placeholder="Спросите что угодно — про файлы, документы, код…"></textarea>
  <button id="newChatBtn" class="ghost" title="Новый чат">+</button>

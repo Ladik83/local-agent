@@ -162,7 +162,9 @@ def _fetch_hf(repo: str, file: str) -> None:
         result = hf.download(repo, file, progress)
         if result.get("ok"):
             DL.update(active=False, pct=100.0, text="Модель скачана", done=result.get("path"))
-            config.save({"last_model": result.get("path")})
+            saved = str(result.get("path") or "")
+            if saved and "embed" not in name.lower():
+                config.save({"last_model": saved})
         else:
             DL.update(active=False, error=result.get("error") or "ошибка", text="Ошибка загрузки")
     except Exception as exc:

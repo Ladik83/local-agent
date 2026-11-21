@@ -422,3 +422,12 @@ body.hugeFont { font-size: 19px; }
 .hfRow { display: flex; gap: 8px; align-items: center; }
 .hfRow input { min-width: 260px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+.modelRow { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; flex-wrap: wrap; }
+.modelLabel { color: var(--muted); font-size: 12.5px; }
+.modelPick {
+  background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+  border-radius: 9px; padding: 5px 8px; font: inherit; font-size: 12.5px; max-width: 460px;
+}
+.modelPick:disabled { opacity: .7; }
+.modelRow .sub { margin: 0; }

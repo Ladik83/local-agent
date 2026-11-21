@@ -168,6 +168,24 @@ def _fill_model(out: dict) -> None:
         diag.warn("panels.py:165", exc)
     if not path:
         path = str(cfg.get("last_model") or "")
+    if path and (not pathlib.Path(path).exists() or "embed" in pathlib.Path(path).name.lower()):
+        path = ""
+    if not path:
+        try:
+            dirs = [cfg.get("models_dir")] + list(cfg.get("extra_dirs") or [])
+            found = scan.scan(dirs)
+            if found:
+                total_ram, free_ram = hardware.ram()
+                budget = float(total_ram) * 0.9
+                ranked = scan.rank(found, budget) if budget else found
+                for item in ranked:
+                    if item.get("fits"):
+                        path = str(item.get("id") or "")
+                        break
+                if not path:
+                    path = str(ranked[0].get("id") or "")
+        except Exception as exc:
+            diag.warn("panels.py:fallback", exc)
     out["loaded"] = loaded
     out["port"] = port if loaded else 0
     out["path"] = path

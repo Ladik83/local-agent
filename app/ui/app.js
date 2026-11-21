@@ -81,21 +81,59 @@ function renderHardware() {
     }
     box.innerHTML = html;
   }
-  const bar = document.getElementById('chatBar');
-  if (bar) {
-    let html = '';
-    if (engine.running) {
-      const name = String(engine.model || '').split(/[\/]/).pop();
-      html += '<b>' + esc(name) + '</b><span>' + (engine.used_mb || 0) + ' МБ в памяти</span>';
-      html += '<button class="ghost tiny" onclick="unloadModel()">Выгрузить</button>';
-    } else if (pick.kind === 'local') {
-      html += '<span>Модель не загружена</span>';
-      html += '<button class="ghost tiny" onclick="startModel(' + JSON.stringify(pick.model.id).replace(/"/g, '&quot;') + ')">Запустить рекомендованную</button>';
-    } else {
-      html += '<span>Модель не загружена</span>';
-    }
-    bar.innerHTML = html;
+  renderModelPicker();
+}
+
+function modelShortName(path) {
+  return String(path || '').split(/[\\/]/).pop().replace(/\.gguf$/i, '');
+}
+
+function renderModelPicker() {
+  const select = document.getElementById('modelPick');
+  if (!select) return;
+  const engine = STATE.engine || {};
+  const settings = STATE.settings || {};
+  const models = STATE.models || [];
+  const running = !!engine.running;
+  let current = running ? String(engine.model || '') : String(settings.last_model || '');
+  if (!running && !current && STATE.pick && STATE.pick.kind === 'local') {
+    current = String((STATE.pick.model || {}).id || '');
   }
+  const options = [];
+  models.forEach(function (item) {
+    const size = gb(item.size_gb || 0);
+    const mark = item.fits ? '' : ' — может не хватить памяти';
+    options.push('<option value="' + esc(item.id) + '">' + esc(modelShortName(item.name)) + ' · ' + size + mark + '</option>');
+  });
+  if (running && engine.model && !models.some(function (item) { return item.id === engine.model; })) {
+    options.unshift('<option value="' + esc(engine.model) + '">' + esc(modelShortName(engine.model)) + '</option>');
+  }
+  select.innerHTML = options.join('') || '<option value="">' + esc('нет моделей — скачайте на вкладке «Модели»') + '</option>';
+  const values = Array.prototype.map.call(select.options, function (option) { return option.value; });
+  if (current && values.indexOf(current) >= 0) select.value = current;
+  select.disabled = !models.length;
+  const loadBtn = document.getElementById('modelLoadBtn');
+  const unloadBtn = document.getElementById('modelUnloadBtn');
+  if (loadBtn) loadBtn.style.display = '';
+  if (unloadBtn) unloadBtn.style.display = running ? '' : 'none';
+  const hint = document.getElementById('modelHint');
+  if (hint) {
+    if (running) hint.textContent = 'в памяти: ' + modelShortName(engine.model);
+    else if (!models.length) hint.textContent = 'нет моделей — скачайте на вкладке «Модели»';
+    else hint.textContent = '';
+  }
+}
+
+function wireModelPicker() {
+  const loadBtn = document.getElementById('modelLoadBtn');
+  const unloadBtn = document.getElementById('modelUnloadBtn');
+  if (loadBtn) loadBtn.addEventListener('click', function () {
+    const select = document.getElementById('modelPick');
+    const path = select ? select.value : '';
+    if (!path) { toast('Модель не выбрана'); return; }
+    startModel(path);
+  });
+  if (unloadBtn) unloadBtn.addEventListener('click', unloadModel);
 }
 
 async function unloadModel() {
@@ -2179,6 +2217,7 @@ bootStep('gear', wireGear);
 bootStep('autostart', loadAutostart);
 bootStep('hf', wireModels);
 bootStep('attach', wireAttach);
+bootStep('modelPicker', wireModelPicker);
 bootStep('drop', wireDrop);
 bootStep('embeddings', wireEmbeddings);
 loadState().catch(function (err) { toast('Не удалось получить состояние: ' + err.message); });
