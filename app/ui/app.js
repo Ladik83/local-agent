@@ -211,7 +211,7 @@ function renderAttach() {
   ATTACH.forEach(function (item, index) {
     const chip = document.createElement('span');
     chip.className = 'attachChip';
-    chip.textContent = item.name + ' · ' + Math.round(item.chars / 100) / 10 + 'k';
+    chip.textContent = item.name + ' · ' + (item.chars < 1000 ? item.chars + ' зн.' : Math.round(item.chars / 100) / 10 + 'k');
     const drop = document.createElement('button');
     drop.textContent = '×';
     drop.onclick = function () { ATTACH.splice(index, 1); renderAttach(); };
@@ -220,16 +220,35 @@ function renderAttach() {
   });
 }
 
+let DROP_TIMER = null;
+
+function dropHintOpen(open) {
+  const hint = document.getElementById('dropHint');
+  if (!hint) return;
+  hint.classList.toggle('on', !!open);
+  if (DROP_TIMER) {
+    clearTimeout(DROP_TIMER);
+    DROP_TIMER = null;
+  }
+  if (open) {
+    DROP_TIMER = setTimeout(function () {
+      hint.classList.remove('on');
+      DROP_TIMER = null;
+    }, 6000);
+  }
+}
+
 async function attachFile(file) {
   const hint = document.getElementById('dropHint');
-  if (hint) hint.textContent = 'Читаю ' + file.name + '…';
+  const before = hint ? hint.textContent : '';
+  if (hint) { hint.classList.add('on'); hint.textContent = 'Читаю ' + file.name + '…'; }
   const buffer = await file.arrayBuffer();
   let binary = '';
   const bytes = new Uint8Array(buffer);
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   const data = btoa(binary);
   const res = await postJson('/api/attach/upload', { name: file.name, data: data });
-  if (hint) hint.textContent = 'Перетащите файл сюда: PDF, DOCX, XLSX, CSV, текст';
+  if (hint) { hint.textContent = before; hint.classList.remove('on'); }
   if (!res || !res.ok) { toast('Файл не прочитан: ' + ((res && res.error) || 'ошибка')); return; }
   ATTACH.push({ name: res.name, text: res.text || '', chars: res.chars || 0 });
   renderAttach();
@@ -240,10 +259,10 @@ function wireDrop() {
   const view = document.getElementById('view-chat');
   if (!view) return;
   ['dragenter', 'dragover'].forEach(function (name) {
-    view.addEventListener(name, function (event) { event.preventDefault(); view.classList.add('dragging'); });
+    view.addEventListener(name, function (event) { event.preventDefault(); view.classList.add('dragging'); dropHintOpen(true); });
   });
   ['dragleave', 'drop'].forEach(function (name) {
-    view.addEventListener(name, function (event) { event.preventDefault(); view.classList.remove('dragging'); });
+    view.addEventListener(name, function (event) { event.preventDefault(); view.classList.remove('dragging'); dropHintOpen(false); });
   });
   view.addEventListener('drop', function (event) {
     const files = event.dataTransfer ? event.dataTransfer.files : null;
@@ -251,6 +270,25 @@ function wireDrop() {
     attachFile(files[0]);
   });
 }
+function wireAttach() {
+  const button = document.getElementById('attachBtn');
+  const picker = document.getElementById('filePick');
+  if (button) {
+    button.addEventListener('click', function () {
+      dropHintOpen(true);
+      if (picker) picker.click();
+    });
+  }
+  if (picker) {
+    picker.addEventListener('change', function () {
+      const file = picker.files && picker.files[0];
+      if (file) attachFile(file);
+      picker.value = '';
+    });
+  }
+  dropHintOpen(false);
+}
+
 async function send() {
   const input = document.getElementById('input');
   const text = input.value.trim();
@@ -2140,6 +2178,8 @@ bootStep('resizers', wireResizers);
 bootStep('gear', wireGear);
 bootStep('autostart', loadAutostart);
 bootStep('hf', wireModels);
+bootStep('attach', wireAttach);
+bootStep('drop', wireDrop);
 bootStep('embeddings', wireEmbeddings);
 loadState().catch(function (err) { toast('Не удалось получить состояние: ' + err.message); });
 pollStats();
