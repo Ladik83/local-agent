@@ -149,14 +149,15 @@ def check(url: str, timeout: float = 10) -> dict:
         return result
 
     result["latest"] = latest
-    result["url"] = str(data.get("url") or "").strip()
+    raw_url = str(data.get("url") or "").strip()
+    result["url"] = raw_url
     result["notes"] = str(data.get("notes") or "")
     result["sha256"] = str(data.get("sha256") or "").strip().lower()
 
     pubkey = str(config.load().get("update_pubkey") or "").strip()
     if pubkey:
         signature_b64 = str(data.get("signature") or "").strip()
-        message = signature.manifest_message(latest, result["url"], result["sha256"])
+        message = signature.manifest_message(latest, raw_url, result["sha256"])
         if not signature.verify(pubkey, message, signature_b64):
             result["error"] = "Подпись манифеста не совпала: обновление отклонено"
             result["signed"] = False
@@ -164,6 +165,8 @@ def check(url: str, timeout: float = 10) -> dict:
             return result
         result["signed"] = True
 
+    if raw_url and not urllib.parse.urlsplit(raw_url).scheme:
+        result["url"] = urllib.parse.urljoin(url.strip(), raw_url)
     result["update"] = _version_tuple(latest) > _version_tuple(current)
     result["ok"] = True
     _log("проверка: текущая %s, в манифесте %s, обновление %s"

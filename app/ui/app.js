@@ -2851,9 +2851,26 @@ async function loadLan() {
   if (hint) hint.textContent = data.enabled
     ? 'Включено: телефон в той же сети откроет агента по ссылке ниже.'
     : 'Выключено: сервер слушает только этот компьютер.';
+  const readonly = document.getElementById('lanReadonly');
+  if (readonly) {
+    readonly.checked = data.readonly !== false;
+    readonly.onchange = async function () {
+      await postJson('/api/settings', { lan_readonly: readonly.checked });
+      toast(readonly.checked ? 'С других устройств — только чтение' : 'С других устройств разрешены изменения');
+    };
+  }
   if (links) links.innerHTML = (data.urls || []).map(function (url) {
-    return '<div>' + esc(url) + '</div>';
+    return '<div class="lanLink"><code>' + esc(url) + '</code>' +
+      '<button class="ghost tiny" data-copy="' + esc(url) + '">Копировать</button></div>';
   }).join('');
+  if (links) {
+    Array.prototype.forEach.call(links.querySelectorAll('[data-copy]'), function (btn) {
+      btn.addEventListener('click', async function () {
+        try { await navigator.clipboard.writeText(btn.getAttribute('data-copy')); toast('Ссылка скопирована'); }
+        catch (error) { toast('Не удалось скопировать'); }
+      });
+    });
+  }
   box.onchange = async function () {
     await postJson('/api/settings', { lan_access: box.checked });
     toast('Перезапустите приложение, чтобы применить');

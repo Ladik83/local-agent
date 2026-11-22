@@ -65,8 +65,12 @@ def build_manifest(zip_path, version: str, url: str, notes: str = "",
     clean_url = str(url or "").strip()
     if not clean_url:
         raise ValueError("не задан --url (ссылка на архив)")
-    if not (clean_url.startswith("https://") or clean_url.startswith("http://")):
-        raise ValueError("ссылка должна начинаться с https:// или http://")
+    absolute = clean_url.startswith("https://") or clean_url.startswith("http://")
+    relative = "/" not in clean_url.split("?")[0].split("#")[0] or not clean_url.startswith(("http", "//"))
+    if not absolute and (clean_url.startswith("//") or ":" in clean_url.split("/")[0]):
+        raise ValueError("ссылка должна быть https://… или именем файла рядом с манифестом")
+    if not absolute and not clean_url.lower().endswith(".zip"):
+        raise ValueError("относительная ссылка должна указывать на .zip")
 
     digest = sha256_file(package)
     data = {

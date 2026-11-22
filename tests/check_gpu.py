@@ -10,6 +10,14 @@ sys.path.insert(0, str(ROOT))
 
 from app import config, engine  # noqa: E402
 
+# тест работает со своей копией настроек и не трогает настоящие
+_real_settings = config.SETTINGS_PATH
+_work = pathlib.Path(tempfile.mkdtemp(prefix="gpu-settings-")) / "settings.json"
+_work.write_text(_real_settings.read_text(encoding="utf-8") if _real_settings.exists() else "{}", encoding="utf-8")
+config.SETTINGS_PATH = _work
+config._cfg = None
+config._cfg_stamp = -1.0
+
 problems = 0
 
 
@@ -130,6 +138,10 @@ finally:
     engine.find_exe = saved_find
     engine.find_projector = saved_projector
     config.save({"gpu": "auto"})
+
+config.SETTINGS_PATH = _real_settings
+config._cfg = None
+config._cfg_stamp = -1.0
 
 print()
 if problems:

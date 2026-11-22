@@ -18,6 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from . import agent, attach, autostart, catalog, chats as chats_mod, hf, schedule, chats, config, drives, embed, engine, hardware, keystore, mcp, orchestrator, panels, plan, providers, rag, roles, scan, skills, stats, subagents, tools, updater, vision, voice
 
 UI_DIR = pathlib.Path(__file__).parent / "ui"
+LAN_WRITE_OK = {"/api/chat", "/api/chat/cancel", "/api/chats/save"}
 TOKEN_FILE = config.DATA_DIR / "access.token"
 def _load_token() -> str:
     try:
@@ -360,6 +361,15 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return address.is_private or address.is_loopback
 
+    def _lan_readonly(self) -> bool:
+        """Запрос с другого устройства, а настройка «только чтение» включена?"""
+        if not config.load().get("lan_readonly", True):
+            return False
+        try:
+            return not ipaddress.ip_address(self.client_address[0]).is_loopback
+        except (ValueError, IndexError):
+            return True
+
     def _need_token(self) -> bool:
         route = urllib.parse.urlparse(self.path).path
         if not route.startswith("/api/"):
@@ -533,7 +543,9 @@ class Handler(BaseHTTPRequestHandler):
                 links = []
                 for ip in lan_urls():
                     links.append("http://" + ip + ":" + str(port_now) + "/?token=" + ACCESS_TOKEN)
-                self._send({"enabled": bool(cfg_now.get("lan_access")), "port": port_now, "urls": links})
+                self._send({"enabled": bool(cfg_now.get("lan_access")),
+                            "readonly": bool(cfg_now.get("lan_readonly", True)),
+                            "port": port_now, "urls": links})
             elif route == "/api/schedule":
                 self._send({"items": schedule.list_all()})
             elif route == "/api/jobs":
@@ -594,6 +606,10 @@ class Handler(BaseHTTPRequestHandler):
 
         agent.STOP["flag"] = False
         try:
+            if self._lan_readonly():
+                cfg["allow_write"] = False
+                cfg["allow_shell"] = False
+                emit({"type": "note", "text": "С этого устройства разрешено только чтение — запись файлов и команды выключены"})
             target = providers.resolve(cfg)
             images = [str(item) for item in (payload.get("images") or []) if str(item) and pathlib.Path(str(item)).is_file()]
             if images:
@@ -660,6 +676,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._stream_chat(self._body())
                 return
             data = self._body()
+            if self._lan_readonly() and route not in LAN_WRITE_OK:
+                self._send({"ok": False, "error": "С этого устройства доступно только чтение"}, 403)
+                return
             if route == "/api/settings":
                 patch = {k: v for k, v in data.items() if k in config.DEFAULTS}
                 config.save(patch)

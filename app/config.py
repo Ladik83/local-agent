@@ -95,6 +95,7 @@ DEFAULTS: dict = {
     "projects": [],              # рабочие папки пользователя
     "voice_tts": False,          # озвучивать ответы голосом
     "lan_access": False,      # доступ с телефона по локальной сети
+    "lan_readonly": True,     # с других устройств — только чтение
     "tray": False,               # иконка в области уведомлений
     "update_url": "",           # ссылка на манифест обновлений
     "approval_mode": "ask",      # ask | auto — подтверждать запись файлов и команды
@@ -132,11 +133,21 @@ DEFAULTS: dict = {
 }
 
 _cfg: dict | None = None
+_cfg_stamp: float = -1.0
+
+
+def _stamp() -> float:
+    try:
+        return SETTINGS_PATH.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 def load() -> dict:
-    global _cfg
-    if _cfg is not None:
+    """Настройки с диска; кэш сбрасывается, если файл изменили снаружи."""
+    global _cfg, _cfg_stamp
+    stamp = _stamp()
+    if _cfg is not None and stamp == _cfg_stamp:
         return _cfg
     cfg = dict(DEFAULTS)
     try:
@@ -154,6 +165,7 @@ def load() -> dict:
         except OSError as exc:
             diag.warn("config.py:autodetect", exc)
     _cfg = cfg
+    _cfg_stamp = _stamp()
     return cfg
 
 
@@ -163,8 +175,10 @@ def save(patch: dict | None = None) -> dict:
         for k, v in patch.items():
             if k in DEFAULTS:
                 cfg[k] = v
+    global _cfg_stamp
     try:
         SETTINGS_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+        _cfg_stamp = _stamp()
     except OSError as exc:
         diag.warn("config.py:149", exc)
     return cfg

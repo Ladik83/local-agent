@@ -8,3 +8,6 @@ data/
 *.sqlite-shm
 *.log
 .DS_Store
+update_private.key
+update_public.key
+release/
