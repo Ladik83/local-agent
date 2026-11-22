@@ -173,7 +173,8 @@ def transcribe(wav_path: str, language: str = "ru") -> dict:
     command = [cli, "-m", str(model), "-f", audio, "-l", lang,
                "-bs", "5", "-bo", "5", "-nt", "-otxt", "-of", str(base)]
     if "ru" in lang.lower():
-        command += ["--prompt", "Локальный агент, файлы, папки, модель, команда, задача, ревью, отчёт"]
+        # длинная подсказка ломает распознавание на large-v3-turbo («Р» вместо текста)
+        command += ["--prompt", "Локальный агент, файлы, папки, модель"]
     try:
         done = subprocess.run(command, capture_output=True, timeout=300, creationflags=NO_WINDOW)
     except Exception as exc:
