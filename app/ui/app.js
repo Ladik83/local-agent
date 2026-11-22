@@ -178,6 +178,83 @@ async function checkEngineUpdate() {
   }
 }
 
+let APP_VERSION = '';
+
+async function loadAppVersion() {
+  try {
+    const data = await (await fetch('/api/version')).json();
+    APP_VERSION = data.version || '';
+  } catch (error) {
+    APP_VERSION = APP_VERSION || '';
+  }
+  const box = document.getElementById('appVersion');
+  if (box && APP_VERSION) box.textContent = APP_VERSION;
+}
+
+function updateManifestUrl() {
+  const field = document.getElementById('updateUrl');
+  return ((field && field.value) || ((STATE || {}).settings || {}).update_url || '').trim();
+}
+
+async function applyAppUpdate(result) {
+  const url = updateManifestUrl();
+  if (!url) { toast('Сначала укажите адрес манифеста'); return; }
+  const ok = confirm('Скачать и установить версию ' + (result.latest || '') + '?\nПриложение перезапустится.');
+  if (!ok) return;
+  toast('Скачиваю обновление ' + (result.latest || ''));
+  try {
+    await postJson('/api/update/apply', { url: url, zip: result.url || '' });
+    const job = await waitJob('update_apply', 900000);
+    if (job && job.ok) {
+      toast('Обновление установлено, перезапускаю');
+      setTimeout(function () { location.reload(); }, 1200);
+    } else {
+      toast('Не удалось обновить: ' + ((job && job.error) || 'неизвестная ошибка'));
+    }
+  } catch (error) {
+    toast('Ошибка обновления: ' + error.message);
+  }
+}
+
+async function checkAppUpdate() {
+  const url = updateManifestUrl();
+  const state = document.getElementById('updateState');
+  const apply = document.getElementById('updateApply');
+  if (!url) {
+    if (state) state.textContent = 'Укажите адрес манифеста — без него проверка невозможна.';
+    toast('Нужен адрес манифеста обновлений');
+    return;
+  }
+  toast('Проверяю обновление приложения…');
+  const data = await postJson('/api/update/check', { url: url });
+  const current = data.current || APP_VERSION || '—';
+  if (!data.ok) {
+    if (state) state.textContent = data.error || 'Не удалось проверить обновление';
+    if (apply) apply.style.display = 'none';
+    toast(data.error || 'Не удалось проверить обновление');
+    return;
+  }
+  if (data.update) {
+    if (state) state.textContent = 'У вас ' + current + ', доступна ' + data.latest +
+      (data.notes ? ' — ' + data.notes : '') + (data.signed ? ' (подпись проверена)' : '');
+    if (apply) {
+      apply.style.display = '';
+      apply.onclick = function () { applyAppUpdate(data); };
+    }
+    toast('У вас ' + current + ', доступна ' + data.latest);
+  } else {
+    if (state) state.textContent = 'У вас последняя версия ' + current + '.';
+    if (apply) apply.style.display = 'none';
+    toast('У вас последняя версия ' + current);
+  }
+}
+
+function wireAppUpdate() {
+  const check = document.getElementById('updateCheck');
+  if (check) check.addEventListener('click', checkAppUpdate);
+  loadAppVersion();
+}
+
 function renderSettings() {
   const s = STATE.settings;
   document.getElementById('allowWrite').checked = !!s.allow_write;
@@ -186,6 +263,8 @@ function renderSettings() {
   document.getElementById('modelsDir').value = s.models_dir || '';
   const pubkey = document.getElementById('updatePubkey');
   if (pubkey) pubkey.value = s.update_pubkey || '';
+  const updateUrl = document.getElementById('updateUrl');
+  if (updateUrl && document.activeElement !== updateUrl) updateUrl.value = s.update_url || '';
   document.getElementById('extraDirs').value = (s.extra_dirs || []).join('; ');
   document.getElementById('context').value = String(s.context || 8192);
   const approval = document.getElementById('approvalMode');
@@ -665,7 +744,8 @@ async function saveSettings() {
     approval_mode: (document.getElementById('approvalMode') || {}).value || 'ask',
     context: parseInt(document.getElementById('context').value, 10) || 8192,
     embed_model: ((document.getElementById('embedModel') || {}).value || '').trim(),
-    update_pubkey: ((document.getElementById('updatePubkey') || {}).value || '').trim()
+    update_pubkey: ((document.getElementById('updatePubkey') || {}).value || '').trim(),
+    update_url: ((document.getElementById('updateUrl') || {}).value || '').trim()
   };
   await fetch('/api/settings', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch)
@@ -2923,6 +3003,7 @@ bootStep('drawerHeight', wireDrawerHeight);
 bootStep('rolesBlock', wireRolesBlock);
 bootStep('drawerHead', wireDrawerHead);
 bootStep('vision', wireVision);
+bootStep('appUpdate', wireAppUpdate);
 bootStep('tools', function () { wireTools(); return loadTools().then(renderTools); });
 bootStep('layout', wireLayout);
 bootStep('drop', wireDrop);

@@ -31,6 +31,14 @@ check("кнопка «Проверить сейчас»", 'id="engineCheck"' in 
 check("галочка авто-проверки", 'id="autoUpdateEngine"' in app_js)
 check("строка про обновление", "Обновление движка" in app_js)
 
+html = (ROOT / "app" / "ui" / "index.html").read_text(encoding="utf-8")
+check("поле адреса манифеста", 'id="updateUrl"' in html)
+check("кнопка проверки приложения", 'id="updateCheck"' in html and 'function checkAppUpdate' in app_js)
+check("вывод версий", 'id="updateState"' in html and "доступна" in app_js)
+check("кнопка установки", 'id="updateApply"' in html and 'function applyAppUpdate' in app_js)
+check("маршрут проверки приложения", '/api/update/check' in main_py)
+check("адрес сохраняется", "update_url" in app_js and "update_url" in config.DEFAULTS)
+
 result = engine.check_latest(force=True)
 if result.get("ok"):
     print("     установлено:", result.get("tag") or "не задано", "| последняя:", result.get("latest"))

@@ -276,6 +276,10 @@
  <label class="row"><span>Проверить модель зрения</span><span><button class="ghost" id="visionCheck">Запустить</button> <button class="ghost" id="visionStop">Выгрузить</button></span></label>
  <label class="row"><span>Проверить и сохранить токен</span><button class="ghost" id="hfTokenSave">Сохранить токен</button></label>
  <label class="row"><span>Открытый ключ обновлений (ECDSA P-256)</span><input type="text" id="updatePubkey" class="wide" placeholder="BASE64"></label>
+ <label class="row"><span>Адрес манифеста обновлений</span><input type="text" id="updateUrl" class="wide" placeholder="https://example.com/latest.json"></label>
+ <div class="sub">Манифест — это JSON с полями version, url, sha256 и подписью. Так приложение узнаёт о новой версии.</div>
+ <div class="row"><span>Версия приложения <b id="appVersion">—</b></span><span><button class="ghost" id="updateCheck">Проверить обновление приложения</button> <button class="primary tiny" id="updateApply" style="display:none">Обновить</button></span></div>
+ <div class="sub" id="updateState"></div>
  <div class="sub" style="margin:-4px 0 10px 2px">Вставьте ключ из sign_update.py keygen — тогда приложение принимает только подписанные манифесты.</div>
  <label class="row"><span>Контекст, токенов</span>
  <input type="number" id="context" min="512" max="262144" step="512" class="wide" list="ctxPresets">
