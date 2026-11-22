@@ -62,6 +62,18 @@ def build_manifest(zip_path, version: str, url: str, notes: str = "",
     if not package.name.lower().endswith(".zip"):
         raise ValueError("ожидается zip-архив, получено: %s" % package.name)
     clean_version = normalize_version(version)
+    import zipfile
+    archive = pathlib.Path(zip_path)
+    if not archive.exists():
+        raise ValueError("нет архива %s" % archive)
+    if archive.stat().st_size > 80 * 1024 * 1024:
+        raise ValueError("архив %.0f МБ — похоже, в него попали данные или модели"
+                         % (archive.stat().st_size / 2 ** 20))
+    with zipfile.ZipFile(str(archive)) as zf:
+        leaked = [name for name in zf.namelist() if name.replace("\\", "/").startswith(("data/", "release/"))]
+    if leaked:
+        raise ValueError("в архиве пользовательские данные: %s" % ", ".join(leaked[:3]))
+
     clean_url = str(url or "").strip()
     if not clean_url:
         raise ValueError("не задан --url (ссылка на архив)")

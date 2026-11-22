@@ -2338,7 +2338,7 @@ function renderVoice() {
   if (!box) return;
   const voice = VOICE || {};
   let html = '<div class="row"><span>Голосовой ввод (whisper.cpp)' +
-    tip('Распознаёт вашу речь MoE и вставляет текстом. Нужна одна загрузка ~180 МБ, дальше всё офлайн.') +
+    tip('Распознаёт вашу речь и вставляет текстом. Нужна одна загрузка: движок ~23 МБ и модель 140–570 МБ в зависимости от точности, дальше всё офлайн.') +
     '</span><span>' + (voice.ready ? badge('готов', 'ok') : badge('нужно скачать', 'no')) + '</span></div>';
   if (!voice.ready) {
     html += '<div class="row"><span></span><button class="ghost" onclick="installVoice()">Скачать распознавание речи</button></div>';
@@ -2471,7 +2471,15 @@ async function stopRecording() {
   const audio = await blobToBase64(encodeWav(pcm, (rec && rec.rate) || 16000));
   toast('Распознаю…');
   const data = await postJson('/api/voice/transcribe', { audio: audio });
-  if (!data.ok) { toast('Не распознал: ' + (data.error || 'ошибка')); return; }
+  if (!data.ok) {
+    const problem = String(data.error || 'ошибка');
+    if (problem.indexOf('движок') >= 0 || problem.indexOf('установлен') >= 0) {
+      toast('Распознавание речи не установлено — «Настройки» → «Голос» → «Скачать распознавание речи»');
+      return;
+    }
+    toast('Не распознал: ' + problem);
+    return;
+  }
   const text = String(data.text || '').trim();
   if (!text) { toast('Ничего не разобрал — попробуйте ещё раз'); return; }
   handleVoiceText(text);
