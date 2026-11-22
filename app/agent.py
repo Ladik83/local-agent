@@ -168,6 +168,30 @@ def _last_user_text(convo: list) -> str:
     return ""
 
 
+def _plan_bind(cfg: dict):
+    """На время вызова инструмента привязать план чата к потоку.
+
+    todo_write зовёт plan.set_plan без chat_id, поэтому пустой chat_id
+    внутри инструмента означает «план того чата, который сейчас отвечает».
+    """
+    try:
+        from . import plan as plan_mod
+        plan_mod.bind(cfg.get("_chat_id") or "")
+        return plan_mod
+    except Exception as exc:
+        diag.warn("agent.py:plan_bind", exc)
+        return None
+
+
+def _plan_unbind(module) -> None:
+    if module is None:
+        return
+    try:
+        module.unbind()
+    except Exception as exc:
+        diag.warn("agent.py:plan_unbind", exc)
+
+
 def _prepare_context(cfg: dict, task: str, emit) -> dict:
     """Добавить к запросу подходящие навыки и текущий план задачи."""
     cfg = dict(cfg)
@@ -181,7 +205,7 @@ def _prepare_context(cfg: dict, task: str, emit) -> dict:
         diag.warn("agent.py:skills", exc)
     try:
         from . import plan as plan_mod
-        text = plan_mod.as_text()
+        text = plan_mod.as_text(cfg.get("_chat_id") or "")
         if text:
             cfg["_plan_text"] = text
     except Exception as exc:
@@ -229,7 +253,11 @@ def chat(convo: list, cfg: dict, emit, target: dict = None) -> list:
             emit({"type": "tool", "name": name, "args": args})
             stats.mark(tool=name, phase="инструмент")
             if tools.approval_gate(name, args, cfg, emit):
-                result = tools.call(name, args, cfg)
+                plan_module = _plan_bind(cfg)
+                try:
+                    result = tools.call(name, args, cfg)
+                finally:
+                    _plan_unbind(plan_module)
             else:
                 result = "Пользователь не разрешил этот вызов — сделай иначе или спроси."
             stats.mark(tool="", phase="ответ")
@@ -237,7 +265,7 @@ def chat(convo: list, cfg: dict, emit, target: dict = None) -> list:
             if name == "todo_write":
                 try:
                     from . import plan as plan_mod
-                    emit({"type": "plan_steps", "plan": plan_mod.snapshot()})
+                    emit({"type": "plan_steps", "plan": plan_mod.snapshot(cfg.get("_chat_id") or "")})
                 except Exception as exc:
                     diag.warn("agent.py:plan_event", exc)
             convo.append({"role": "tool", "tool_call_id": item["id"], "content": result})

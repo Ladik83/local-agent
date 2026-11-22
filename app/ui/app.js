@@ -161,7 +161,7 @@ function renderCatalog() {
 
 async function reapEngine() {
   try {
-    const found = await (await fetch('/api/engine/strays')).json();
+    const found = await postJson('/api/engine/strays', {});
     const count = (found.pids || []).length;
     if (!count) { toast('Лишних серверов нет'); return; }
     if (!confirm('Нашёл лишних серверов: ' + count + '. Остановить их?')) return;
@@ -608,6 +608,7 @@ async function send() {
     }
     if (event.type === 'plan_steps') {
       renderPlan(event.plan);
+      savePlanToChat();
       return;
     }
     if (event.type === 'plan_start' || event.type === 'summary_start') {
@@ -656,6 +657,7 @@ async function send() {
       paint();
       saveChat();
       speakAnswer();
+      loadPlan();
     } else if (event.type === 'error') {
       answer += '\n\nОшибка: ' + event.text;
       paint();
@@ -666,7 +668,7 @@ async function send() {
     const resp = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: HISTORY, mode: currentMode(), images: images })
+      body: JSON.stringify({ messages: HISTORY, mode: currentMode(), images: images, chat: CURRENT_CHAT || '' })
     });
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
@@ -929,6 +931,103 @@ function currentMode() {
   return active ? active.dataset.mode : 'agent';
 }
 
+/* ---------- внешние агенты (OpenAI-совместимый вход) ---------- */
+
+let AGENTS_INFO = null;
+
+function agentsStatusBadge(info) {
+  if (!info || !info.ok) return badge('сервер не запущен', 'warn');
+  return info.running ? badge('работает', 'ok') : badge('остановлен', 'warn');
+}
+
+function renderAgentsInfo(info) {
+  AGENTS_INFO = info || null;
+  const box = document.getElementById('agentsInfoBody');
+  const state = document.getElementById('agentsInfoState');
+  if (!box) return;
+  if (state) {
+    state.textContent = info && info.ok ? (info.running ? 'модель отвечает' : 'модель не запущена') : '';
+  }
+  if (!info || !info.ok) {
+    box.innerHTML = '<div class="row"><span>Сервер модели</span><span>' + agentsStatusBadge(info) + '</span></div>' +
+      '<div class="sub">сервер модели не запущен — запустите модель на вкладке «Модели», затем нажмите «Проверить».</div>' +
+      (info && info.error ? '<div class="sub">Ответ сервера: ' + esc(info.error) + '</div>' : '');
+    return;
+  }
+  const url = String(info.base_url || '').trim();
+  let html = '<div class="row"><span>Адрес для подключения</span><span class="agentsAddr">' +
+    '<code class="mono" id="agentsUrl">' + esc(url || '—') + '</code>' +
+    '<button class="ghost tiny" id="agentsCopy">Скопировать адрес</button></span></div>';
+  html += '<div class="row"><span>Модель</span><b>' + esc(info.model || '—') + '</b></div>';
+  html += '<div class="row"><span>Статус</span><span>' + agentsStatusBadge(info) + '</span></div>';
+  html += '<div class="sub" style="margin-top:8px">Этот адрес можно вставить в любой клиент, который умеет OpenAI-совместимый API: Cline, Continue, opencode, Hermes.</div>';
+  const clients = info.clients || [];
+  html += '<h4>Как подключить</h4>';
+  if (clients.length) {
+    html += clients.map(function (item) {
+      return '<div class="mcpCard"><span><b>' + esc(item.name || 'клиент') + '</b>' +
+        '<span class="sub">' + esc(item.how || '') + '</span></span></div>';
+    }).join('');
+  } else {
+    html += '<div class="sub">Сервер не прислал список клиентов.</div>';
+  }
+  html += '<div class="agentsWarn">Claude Code и Codex CLI ждут Anthropic/Responses API — им нужен прокси, напрямую не подключатся.</div>';
+  box.innerHTML = html;
+  const copy = document.getElementById('agentsCopy');
+  if (copy) copy.addEventListener('click', copyAgentsUrl);
+}
+
+async function copyAgentsUrl() {
+  const url = (AGENTS_INFO && AGENTS_INFO.base_url) || '';
+  if (!url) { toast('Адрес пока неизвестен'); return; }
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('Адрес скопирован');
+    return;
+  } catch (error) {
+    // без https буфер обмена может быть закрыт — выделяем текст, чтобы скопировать вручную
+  }
+  const node = document.getElementById('agentsUrl');
+  if (node && window.getSelection) {
+    try {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      toast('Адрес выделен — нажмите Ctrl+C');
+      return;
+    } catch (error) {
+      // ниже покажем адрес в тосте
+    }
+  }
+  toast('Не удалось скопировать. Адрес: ' + url);
+}
+
+async function loadAgentsInfo(manual) {
+  const box = document.getElementById('agentsInfoBody');
+  if (box && !AGENTS_INFO) box.innerHTML = '<div class="sub">Проверяю адрес и модель…</div>';
+  try {
+    const data = await (await fetch('/api/agents/info')).json();
+    renderAgentsInfo(data);
+    if (manual) {
+      if (!data || !data.ok) toast('сервер модели не запущен');
+      else if (data.running) toast('Сервер модели работает: ' + (data.model || 'модель'));
+      else toast('Адрес есть, но модель не запущена');
+    }
+  } catch (error) {
+    renderAgentsInfo({ ok: false, error: 'маршрут /api/agents/info недоступен' });
+    if (manual) toast('Нет ответа: ' + (error && error.message ? error.message : 'ошибка'));
+  }
+}
+
+function wireAgentsInfo() {
+  const check = document.getElementById('agentsInfoCheck');
+  if (check) check.addEventListener('click', function () { loadAgentsInfo(true); });
+  loadAgentsInfo(false);
+}
+
+
 function applyMode(enabled) {
   document.querySelectorAll('.mode').forEach(function (button) {
     button.classList.toggle('active', (button.dataset.mode === 'team') === !!enabled);
@@ -1021,12 +1120,31 @@ function renderPlan(plan) {
 }
 
 async function loadPlan() {
+  const chat = CURRENT_CHAT || '';
   try {
-    const data = await (await fetch('/api/plan')).json();
+    const data = await (await fetch('/api/plan?chat=' + encodeURIComponent(chat))).json();
     renderPlan(data.plan);
   } catch (error) {
     renderPlan(null);
   }
+}
+
+function savePlanToChat() {
+  if (!CURRENT_CHAT || !CURRENT_PLAN) return;
+  const steps = CURRENT_PLAN.steps || [];
+  if (!steps.length) return;
+  const payload = {
+    chat: CURRENT_CHAT,
+    title: CURRENT_PLAN.title || '',
+    steps: steps.map(function (step) {
+      return { text: step.text || '', status: step.status || 'todo' };
+    })
+  };
+  fetch('/api/plan/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).catch(function () { return; });
 }
 
 async function loadSkills() {
@@ -1049,9 +1167,119 @@ function renderSkills() {
     return;
   }
   box.innerHTML = items.map(function (item) {
-    return '<div class="skillRow"><b>' + esc(item.title) + '</b>' +
-      '<span class="sub">Когда: ' + esc(item.when || '—') + '</span></div>';
+    const name = item.name || '';
+    return '<div class="skillRow"><div class="skillRowMain"><b>' + esc(item.title) + '</b>' +
+      '<span class="sub">Когда: ' + esc(item.when || '—') + '</span></div>' +
+      '<span class="skillRowBtns">' +
+      '<button class="ghost tiny" data-skill-edit="' + esc(name) + '">Изменить</button>' +
+      '<button class="ghost tiny" data-skill-del="' + esc(name) + '">Удалить</button>' +
+      '</span></div>';
   }).join('');
+}
+
+let SKILL_EDITING = '';
+
+function skillLine(value) {
+  return String(value === null || value === undefined ? '' : value).replace(/[\r\n]+/g, ' ').trim();
+}
+
+function openSkillModal(item) {
+  const box = document.getElementById('skillModal');
+  if (!box) return;
+  SKILL_EDITING = (item && item.name) || '';
+  const title = document.getElementById('skillModalTitle');
+  if (title) title.textContent = SKILL_EDITING ? 'Изменить навык' : 'Новый навык';
+  document.getElementById('skillName').value = SKILL_EDITING;
+  document.getElementById('skillTitle').value = (item && item.title) || '';
+  document.getElementById('skillWhen').value = (item && item.when) || '';
+  document.getElementById('skillTags').value = (item && item.tags) || '';
+  document.getElementById('skillBody').value = (item && item.body) || '';
+  const hint = document.getElementById('skillHint');
+  if (hint) hint.textContent = '';
+  box.classList.add('show');
+  const name = document.getElementById('skillName');
+  if (name && !SKILL_EDITING) name.focus();
+  else if (name) name.setSelectionRange(name.value.length, name.value.length);
+}
+
+function closeSkillModal() {
+  const box = document.getElementById('skillModal');
+  if (box) box.classList.remove('show');
+  SKILL_EDITING = '';
+}
+
+async function editSkill(name) {
+  if (!name) return;
+  let data = null;
+  try {
+    data = await (await fetch('/api/skills/one?name=' + encodeURIComponent(name))).json();
+  } catch (error) {
+    toast('Не удалось загрузить навык: сервер не отдал текст');
+    return;
+  }
+  if (!data || !data.ok || !data.item) {
+    toast('Не удалось открыть навык' + (data && data.error ? ': ' + data.error : ' — сервер не отдал текст'));
+    return;
+  }
+  const item = data.item;
+  if (!item.name) item.name = name;
+  openSkillModal(item);
+}
+
+async function saveSkill() {
+  const name = (document.getElementById('skillName').value || '').trim();
+  const title = skillLine(document.getElementById('skillTitle').value);
+  const when = skillLine(document.getElementById('skillWhen').value);
+  const tags = skillLine(document.getElementById('skillTags').value);
+  const body = (document.getElementById('skillBody').value || '').trim();
+  const hint = document.getElementById('skillHint');
+  const say = function (text) { if (hint) hint.textContent = text; };
+  if (!/^[0-9A-Za-zА-Яа-я._-]{1,60}$/.test(name)) {
+    say('Имя без пробелов и косых черт: например review-code');
+    return;
+  }
+  if (!SKILL_EDITING && !/^[0-9A-Za-z][0-9A-Za-z._-]{0,59}$/.test(name)) {
+    say('Новое имя — латиницей и цифрами, без пробелов: например review-code');
+    return;
+  }
+  if (!title) { say('Заполните заголовок навыка'); return; }
+  if (!body) { say('Напишите текст навыка'); return; }
+  const text = '---\nname: ' + name + '\ntitle: ' + title + '\nwhen: ' + when +
+    '\ntags: ' + tags + '\n---\n' + body + '\n';
+  const button = document.getElementById('skillSave');
+  if (button) button.disabled = true;
+  try {
+    const data = await postJson('/api/skills/save', { name: name, text: text });
+    if (!data || !data.ok) {
+      say('');
+      toast('Не удалось сохранить: ' + ((data && data.error) || 'ошибка'));
+      return;
+    }
+    const wasEditing = !!SKILL_EDITING;
+    closeSkillModal();
+    toast(wasEditing ? 'Навык обновлён: ' + name : 'Навык создан: ' + name);
+    await refreshSkills();
+  } catch (error) {
+    toast('Не удалось сохранить: ' + (error && error.message ? error.message : 'ошибка'));
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function deleteSkill(name) {
+  if (!name) return;
+  if (!confirm('Удалить навык «' + name + '»? Файл SKILL.md будет удалён.')) return;
+  try {
+    const data = await postJson('/api/skills/delete', { name: name });
+    if (!data || !data.ok) {
+      toast('Не удалось удалить: ' + ((data && data.error) || 'ошибка'));
+      return;
+    }
+    toast('Навык удалён: ' + name);
+    await refreshSkills();
+  } catch (error) {
+    toast('Не удалось удалить: ' + (error && error.message ? error.message : 'ошибка'));
+  }
 }
 
 async function refreshSkills() {
@@ -1068,8 +1296,39 @@ async function seedSkills() {
 function wireSkills() {
   const seed = document.getElementById('skillsSeed');
   const refresh = document.getElementById('skillsRefresh');
+  const add = document.getElementById('skillsNew');
   if (seed) seed.addEventListener('click', seedSkills);
   if (refresh) refresh.addEventListener('click', refreshSkills);
+  if (add) add.addEventListener('click', function () { openSkillModal(null); });
+  const list = document.getElementById('skillsList');
+  if (list) list.addEventListener('click', function (event) {
+    const target = event.target;
+    if (!target || !target.closest) return;
+    const edit = target.closest('[data-skill-edit]');
+    if (edit) { editSkill(edit.dataset.skillEdit); return; }
+    const del = target.closest('[data-skill-del]');
+    if (del) deleteSkill(del.dataset.skillDel);
+  });
+  const cancel = document.getElementById('skillCancel');
+  if (cancel) cancel.addEventListener('click', closeSkillModal);
+  const save = document.getElementById('skillSave');
+  if (save) save.addEventListener('click', saveSkill);
+  const modal = document.getElementById('skillModal');
+  if (modal) modal.addEventListener('click', function (event) {
+    if (event.target === modal) closeSkillModal();
+  });
+  ['skillName', 'skillTitle', 'skillWhen', 'skillTags'].forEach(function (id) {
+    const field = document.getElementById(id);
+    if (field) field.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') { event.preventDefault(); saveSkill(); }
+      if (event.key === 'Escape') closeSkillModal();
+    });
+  });
+  const body = document.getElementById('skillBody');
+  if (body) body.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') closeSkillModal();
+    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); saveSkill(); }
+  });
   loadSkills().then(renderSkills);
   loadPlan();
 }
@@ -1513,6 +1772,7 @@ async function openChat(id) {
     addMsg(message.role === 'user' ? 'user' : 'bot', message.content);
   });
   renderChats();
+  loadPlan();
 }
 
 function newChat() {
@@ -1520,6 +1780,7 @@ function newChat() {
   HISTORY = [];
   document.getElementById('messages').innerHTML = '';
   renderChats();
+  loadPlan();
   toast('Новый чат');
 }
 
@@ -2827,7 +3088,7 @@ document.querySelectorAll('.tab').forEach(function (button) {
     target.scrollTop = 0;
     if (button.dataset.tab === 'kb') loadKB();
     if (button.dataset.tab === 'tasks') loadTasks();
-    if (button.dataset.tab === 'settings') { loadLan(); loadTelegram(); }
+    if (button.dataset.tab === 'settings') { loadLan(); loadTelegram(); loadAgentsInfo(); }
     if (button.dataset.tab === 'tools') { loadTools().then(renderTools); refreshSkills(); }
   });
 });
@@ -3108,6 +3369,7 @@ bootStep('drawerHeight', wireDrawerHeight);
 bootStep('rolesBlock', wireRolesBlock);
 bootStep('drawerHead', wireDrawerHead);
 bootStep('vision', wireVision);
+bootStep('agentsInfo', wireAgentsInfo);
 bootStep('appUpdate', wireAppUpdate);
 bootStep('skills', wireSkills);
 bootStep('tools', function () { wireTools(); return loadTools().then(renderTools); });

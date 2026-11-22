@@ -233,7 +233,7 @@
   <h4>Навыки агента</h4>
   <div class="sub">Короткие проверенные инструкции под типовые задачи. Агент сам подбирает 1–2 навыка по тексту задачи и получает их отдельным правилом. Файлы: <span id="skillsDir">—</span></div>
   <div id="skillsList"></div>
-  <div class="row"><span></span><span><button class="ghost" id="skillsSeed">Добавить встроенные</button> <button class="ghost" id="skillsRefresh">Обновить</button></span></div>
+  <div class="row"><span></span><span><button class="primary tiny" id="skillsNew">Новый навык</button> <button class="ghost" id="skillsSeed">Добавить встроенные</button> <button class="ghost" id="skillsRefresh">Обновить</button></span></div>
  </div>
  <div class="panel">
   <h4>Подключённые серверы</h4>
@@ -259,6 +259,10 @@
  <h2>Настройки</h2>
  <div class="panel" id="voicePanel"></div>
  <div class="panel" id="enginePanel"></div>
+ <div class="panel" id="agentsInfoPanel">
+  <div class="row"><span>Внешние агенты: вход OpenAI-совместимый<span class="help" data-tip="Локальная модель отдаёт тот же API, что OpenAI. Любой редактор кода или агент может подключиться к этому адресу и работать на вашей машине, без облака.">?</span></span><span><span class="sub" id="agentsInfoState"></span> <button class="ghost tiny" id="agentsInfoCheck">Проверить</button></span></div>
+  <div id="agentsInfoBody"><div class="sub">Проверяю адрес и модель…</div></div>
+ </div>
  <div class="panel">
  <label class="row"><span>Опасные действия агента (запись файлов, команды)</span>
  <select id="approvalMode">
@@ -408,6 +412,18 @@
 </div>
 <div class="modalBack" id="approveModal">
  <div class="modal" id="approveBody"></div>
+</div>
+<div class="modalBack" id="skillModal">
+ <div class="modal modalWide">
+  <h3 id="skillModalTitle">Новый навык</h3>
+  <div class="sub">Навык — это файл SKILL.md. Имя файла — латиницей и цифрами, без пробелов.</div>
+  <div class="skillField"><span>Имя файла</span><input type="text" id="skillName" placeholder="review-code" autocomplete="off" spellcheck="false"></div>
+  <div class="skillField"><span>Заголовок</span><input type="text" id="skillTitle" placeholder="Ревью кода перед сдачей"></div>
+  <div class="skillField"><span>Когда применять</span><input type="text" id="skillWhen" placeholder="ревью, проверка кода, перед коммитом"></div>
+  <div class="skillField"><span>Теги</span><input type="text" id="skillTags" placeholder="код, ревью, качество"></div>
+  <div class="skillField"><span>Текст навыка</span><textarea id="skillBody" rows="12" placeholder="1. Прочитай изменение целиком…"></textarea></div>
+  <div class="row"><span class="sub" id="skillHint"></span><span><button class="ghost" id="skillCancel">Отмена</button> <button class="primary" id="skillSave">Сохранить</button></span></div>
+ </div>
 </div>
 <div id="toast" class="toast"></div>
 <script src="/ui/panels.js"></script>

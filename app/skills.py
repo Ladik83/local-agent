@@ -234,6 +234,15 @@ def context(task: str, limit: int = MAX_SKILLS) -> str:
     return "\n\n".join(parts)
 
 
+def one(name: str) -> dict:
+    """Один навык целиком — для редактора в интерфейсе."""
+    wanted = str(name or "").strip()
+    for item in index():
+        if item["name"] == wanted or pathlib.Path(item["path"]).parent.name == wanted:
+            return {"ok": True, "item": {key: item[key] for key in ("name", "title", "when", "tags", "body", "path")}}
+    return {"ok": False, "error": "навык не найден"}
+
+
 def overview() -> dict:
     items = index()
     return {

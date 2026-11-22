@@ -764,7 +764,40 @@ body.hugeFont { --fs: 19px; }
 .planProgress { margin-top: 4px; font-size: 11.5px; color: var(--muted); }
 
 /* ---------- навыки ---------- */
-.skillRow { border-bottom: 1px dashed var(--line); padding: 6px 0; }
+.skillRow { border-bottom: 1px dashed var(--line); padding: 6px 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .skillRow:last-child { border-bottom: 0; }
 .skillRow b { font-size: 13px; }
 .skillRow .sub { display: block; margin-top: 2px; }
+.skillRowMain { min-width: 0; }
+.skillRowBtns { display: flex; gap: 6px; flex: none; }
+.skillRowBtns button { margin: 0; }
+
+/* ---------- редактор навыка ---------- */
+.modal.modalWide { max-width: 780px; }
+.skillField { display: block; padding: 6px 0; }
+.skillField > span {
+  display: block; font-size: 11.5px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--muted); margin-bottom: 5px;
+}
+.skillField input, .skillField textarea { width: 100%; box-sizing: border-box; }
+#skillBody {
+  max-height: 46vh; min-height: 220px; font-family: ui-monospace, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.55; resize: vertical;
+}
+#skillHint { min-height: 16px; margin: 0; color: var(--warn); }
+
+/* ---------- внешние агенты ---------- */
+.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+.agentsAddr { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.agentsAddr code {
+  background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 4px 8px; overflow-wrap: anywhere;
+}
+.agentsWarn {
+  border: 1px dashed var(--line); border-left: 2px solid var(--warn); border-radius: 8px;
+  padding: 8px 10px; margin: 10px 0 4px; font-size: 12.5px; color: var(--muted);
+}
+.agentsWarn b { color: var(--warn); }
+#agentsInfoPanel button { margin: 0; }
+#agentsInfoPanel .mcpCard { margin: 6px 0; }
+#agentsInfoPanel h4 { margin: 14px 0 4px; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: .6px; }

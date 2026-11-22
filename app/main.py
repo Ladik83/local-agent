@@ -15,7 +15,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import agent, attach, autostart, catalog, chats as chats_mod, hf, schedule, chats, config, drives, embed, engine, hardware, keystore, mcp, orchestrator, panels, plan, providers, rag, roles, scan, skills, stats, tools, updater, vision, voice
+from . import agent, attach, autostart, catalog, chats as chats_mod, hf, schedule, chats, config, drives, embed, engine, hardware, keystore, mcp, orchestrator, panels, plan, providers, rag, roles, scan, skills, stats, subagents, tools, updater, vision, voice
 
 UI_DIR = pathlib.Path(__file__).parent / "ui"
 TOKEN_FILE = config.DATA_DIR / "access.token"
@@ -79,6 +79,33 @@ MCP_CATALOG = [
      "about": "Список контейнеров, логи, запуск и остановка — без ручных команд.",
      "args": ["mcp-server-docker"]},
 ]
+def _agents_info() -> dict:
+    """Как подключить внешние оболочки к нашему серверу моделей."""
+    cfg = config.load()
+    provider = providers.resolve(cfg)
+    base = str(provider.get("base_url") or "").rstrip("/")
+    model = str(provider.get("model") or "")
+    running = False
+    if provider.get("kind") == "local":
+        base = (engine.base_url() or "").rstrip("/")
+        model = pathlib.Path(str(engine.SERVER.get("model") or "")).name
+        running = bool(base)
+    else:
+        running = bool(base)
+    url = base if base.endswith("/v1") else (base + "/v1" if base else "")
+    shown = url or "http://127.0.0.1:8090/v1"
+    name = model or "имя файла модели"
+    clients = [
+        {"name": "Cline (VS Code)", "how": "OpenAI Compatible: Base URL " + shown + ", API Key — любая строка, Model — " + name},
+        {"name": "Continue", "how": "provider: openai, apiBase: " + shown + ", model: " + name},
+        {"name": "opencode", "how": "OPENAI_BASE_URL=" + shown + ", OPENAI_API_KEY — любая строка"},
+        {"name": "Hermes Agent", "how": "провайдер openai, base_url " + shown + ", model " + name},
+        {"name": "Claude Code / Codex CLI", "how": "ждут Anthropic/Responses API — нужен прокси-переводчик, напрямую не подключатся"},
+    ]
+    return {"ok": True, "base_url": url, "model": model, "running": running,
+            "kind": provider.get("kind"), "clients": clients}
+
+
 def _expand_args(args) -> list:
     """Подставить домашнюю папку и папку данных в аргументы MCP-сервера."""
     home = str(pathlib.Path.home())
@@ -433,13 +460,30 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({"chats": chats.list_all()})
             elif route == "/api/chats/get":
                 query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-                self._send(chats.load((query.get("id") or [""])[0]))
+                chat_id = str((query.get("id") or [""])[0])
+                payload = chats.load(chat_id)
+                try:
+                    payload["plan"] = plan.snapshot(chat_id)
+                except Exception as exc:
+                    diag.warn("main.py:chats_get_plan", exc)
+                self._send(payload)
             elif route == "/api/job":
                 self._send({"engine": dict(engine.JOB), "download": dict(DL), "discover": dict(DISC)})
             elif route == "/api/skills":
                 self._send({"ok": True, **skills.overview()})
+            elif route == "/api/skills/one":
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                self._send(skills.one((query.get("name") or [""])[0]))
+            elif route == "/api/agents/info":
+                self._send(_agents_info())
             elif route == "/api/plan":
-                self._send({"ok": True, "plan": plan.snapshot()})
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                chat_id = (query.get("chat") or [""])[0]
+                self._send({"ok": True, "plan": plan.snapshot(chat_id)})
+            elif route == "/api/subagents/roles":
+                items = [{"id": item.get("id"), "title": item.get("title")}
+                         for item in roles.merge(config.load())]
+                self._send({"ok": True, "items": items})
             elif route == "/api/vision/models":
                 cfg = config.load()
                 self._send({"ok": True, "items": vision.candidates(cfg), "pick": vision.pick(cfg),
@@ -507,7 +551,10 @@ class Handler(BaseHTTPRequestHandler):
             return {}
 
     def _stream_chat(self, payload: dict):
-        cfg = config.load()
+        cfg = dict(config.load())
+        chat_id = str(payload.get("chat") or payload.get("chat_id") or "").strip()
+        if chat_id:
+            cfg["_chat_id"] = chat_id
         convo = payload.get("messages") or []
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -611,8 +658,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(saved)
             elif route == "/api/skills/delete":
                 self._send(skills.delete(str(data.get("name") or "")))
+            elif route == "/api/plan/save":
+                chat_id = str(data.get("chat") or "")
+                saved = plan.set_plan(data.get("title") or "", data.get("steps") or [], chat_id)
+                self._send({"ok": True, "plan": saved})
             elif route == "/api/plan/reset":
-                self._send({"ok": True, "plan": plan.reset()})
+                chat_id = str(data.get("chat") or "")
+                self._send({"ok": True, "plan": plan.reset(chat_id)})
             elif route == "/api/tools/toggle":
                 name = str(data.get("name") or "").strip()
                 if not name:
@@ -659,11 +711,23 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({"ok": True, "provider": providers.summary(config.load())})
             elif route == "/api/chats/save":
                 saved = chats.save(str(data.get("id") or ""), data.get("messages") or [], str(data.get("title") or ""))
+                if isinstance(data.get("plan"), dict):
+                    try:
+                        plan.save(str(data.get("id") or saved.get("id") or ""), data["plan"])
+                    except Exception as exc:
+                        diag.warn("main.py:chats_save_plan", exc)
                 result = {"ok": True}
                 result.update(saved)
                 self._send(result)
             elif route == "/api/chats/get":
-                self._send(chats.load(str(data.get("id") or "")))
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                chat_id = str((query.get("id") or [""])[0])
+                payload = chats.load(chat_id)
+                try:
+                    payload["plan"] = plan.snapshot(chat_id)
+                except Exception as exc:
+                    diag.warn("main.py:chats_get_plan", exc)
+                self._send(payload)
             elif route == "/api/chats/delete":
                 chats.delete(str(data.get("id") or ""))
                 self._send({"ok": True})
@@ -813,6 +877,26 @@ class Handler(BaseHTTPRequestHandler):
             elif route == "/api/roles":
                 roles.save(config.load(), data.get("roles") or [])
                 self._send({"ok": True, "roles": roles.merge(config.load())})
+            elif route == "/api/subagents/run":
+                task = str(data.get("task") or "").strip()
+                wanted = [str(item) for item in (data.get("roles") or []) if str(item).strip()]
+                if not task:
+                    self._send({"ok": False, "error": "пустая задача"})
+                elif len(wanted) > subagents.MAX_ROLES:
+                    self._send({"ok": False, "error": "не более %d ролей за запуск" % subagents.MAX_ROLES})
+                else:
+                    cfg = dict(config.load())
+                    target = providers.resolve(cfg)
+                    events = []
+
+                    def emit(event, _events=events):
+                        _events.append(event)
+
+                    started = _start_job("subagents",
+                                         lambda: subagents.run(task, wanted, cfg, target, emit))
+                    if started.get("ok") and "subagents" in JOBS:
+                        JOBS["subagents"]["events"] = events
+                    self._send(started)
             elif route == "/api/team":
                 config.save({"use_team": bool(data.get("enabled"))})
                 self._send({"ok": True, "enabled": bool(config.load().get("use_team"))})
