@@ -55,11 +55,14 @@ check("слой подсказок", 'id="tipLayer"' in html and ".tipLayer" in 
 check("подсказки ролей в коде", "function wireRolesBlock()" in app and "showRoleTip" in app)
 check("список ролей рисуется", "function renderRolesMenu()" in app)
 
-center_html = html.split('id="composer"')[0].split('<div id="messages"')[1] if '<div id="messages"' in html else ''
+center_html = html.split('class="chatCenter"')[1].split('railRight')[0] if 'class="chatCenter"' in html else ''
 model_block = html.split('data-block="model"')[1].split('data-block="resources"')[0]
 check("режимы в центре чата", 'class="modes"' in center_html)
 check("короткие подписи режимов", ">Один<span" in html and ">Команда<span" in html)
-check("режимы внутри карточки ввода", 'class="composerCard"' in html and html.index('class="modes"') < html.index('id="composer"'))
+check("режимы внутри карточки ввода", 'class="composerCard"' in html and
+      html.index('id="composer"') < html.index('class="modes"'))
+check("ввод выше режимов", html.index('id="composer"') < html.index('class="modes"'))
+check("разделитель над режимами", ".composerCard .modes { border-top: 1px solid var(--line)" in css)
 check("подпись «Режим работы»", "Режим работы" in html)
 check("примеров не меньше восьми", html.count('data-template=') >= 8, "найдено %d" % html.count('data-template='))
 check("примеры по центру", "justify-content: center" in css and ".templates {" in css)
