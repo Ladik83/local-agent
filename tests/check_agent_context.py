@@ -77,6 +77,20 @@ def main() -> int:
           any(item.get("role") == "user" and "починить" in str(item.get("content")) for item in CAPTURED["messages"]))
     check("ответ дошёл", any(event.get("type") == "done" for event in events))
 
+    # --- регрессии: чат в обычном режиме и выключатель агента ---
+    main_src = (ROOT / "app" / "main.py").read_text(encoding="utf-8")
+    chat_line = next((line for line in main_src.splitlines() if "agent.chat(convo, cfg, emit, target)" in line), "")
+    if_line = next((line for line in main_src.splitlines() if 'payload.get("mode") == "team"' in line), "")
+    check("agent.chat вне ветки team", bool(chat_line) and len(chat_line) - len(chat_line.lstrip()) == len(if_line) - len(if_line.lstrip()),
+          "отступ чата %d, отступ if %d" % (len(chat_line) - len(chat_line.lstrip()), len(if_line) - len(if_line.lstrip())))
+
+    off_cfg = dict(cfg)
+    off_cfg["agent_mode"] = False
+    off_events = []
+    prepared_off = agent._prepare_tools(off_cfg, "прочитай файл", off_events.append)
+    check("выключатель агента убирает инструменты", prepared_off.get("_only_tools") == [],
+          str(off_events[-1]["text"] if off_events else ""))
+
     plan.reset()
     print()
     if problems:

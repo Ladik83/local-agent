@@ -62,16 +62,10 @@
  </div>
  <div class="attachBar" id="attachBar"></div>
  <div class="dropHint" id="dropHint">Перетащите файл сюда: PDF, DOCX, XLSX, CSV, текст</div>
- <div class="modelRow">
-  <span class="modelLabel">Модель</span>
-  <select id="modelPick" class="modelPick" title="Выберите модель и загрузите её в память"></select>
-  <button id="modelLoadBtn" class="ghost tiny">Загрузить</button>
-  <button id="modelUnloadBtn" class="ghost tiny" style="display:none">Выгрузить</button>
-  <span class="sub" id="modelHint"></span>
-   <div class="modes">
-   <button class="mode active" data-mode="agent" title="Один помощник — на вопрос отвечает одна модель">Один<span class="help" data-tip="Обычный режим: на ваш вопрос отвечает одна модель. Быстро и просто — для повседневных задач.">?</span></button>
-   <button class="mode" data-mode="team" title="Команда специалистов — задачу разбирают несколько ролей по очереди">Команда<span class="help" data-tip="Сложную задачу по очереди разбирают несколько ролей: аналитик, разработчик, ревьюер и другие. Дольше, но глубже.">?</span></button>
-   </div>
+ <div class="modes">
+  <button class="mode active" data-mode="agent" title="Один помощник — на вопрос отвечает одна модель">Один<span class="help" data-tip="Обычный режим: на ваш вопрос отвечает одна модель. Быстро и просто — для повседневных задач.">?</span></button>
+  <button class="mode" data-mode="team" title="Команда специалистов — задачу разбирают несколько ролей по очереди">Команда<span class="help" data-tip="Сложную задачу по очереди разбирают несколько ролей: аналитик, разработчик, ревьюер и другие. Дольше, но глубже.">?</span></button>
+  <button class="chip agentMode" id="agentModeBtn" title="Режим агента: модель может читать файлы, искать по проекту, запускать проверки и вести план">Агент: вкл</button>
  </div>
  <div id="composer" class="composer">
  <textarea id="input" rows="1" placeholder="Спросите что угодно — про файлы, документы, код…"></textarea>
@@ -89,7 +83,21 @@
     <div class="railBody" id="railRightBody" data-zone="right">
      <div class="kblock" data-block="model">
       <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Модель</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
-      <div class="kblockBody"><div id="monModel"></div></div>
+      <div class="kblockBody">
+       <select id="modelPick" class="modelPick" title="Выберите модель и загрузите её в память"></select>
+       <div class="modelBtns">
+        <button id="modelLoadBtn" class="primary tiny">Загрузить</button>
+        <button id="modelUnloadBtn" class="ghost tiny" style="display:none">Выгрузить</button>
+        <span class="sub" id="modelHint"></span>
+       </div>
+       <div id="monModel"></div>
+       <div class="modelAddr" id="modelAddr" hidden>
+        <span class="sub">Адрес для других приложений</span>
+        <code id="modelAddrText"></code>
+        <button class="ghost tiny" id="modelAddrCopy" title="Скопировать адрес OpenAI-совместимого API">Копировать</button>
+       </div>
+       <div id="modelTuning"></div>
+      </div>
      </div>
      <div class="kblock" data-block="resources">
       <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Ресурсы</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
@@ -331,10 +339,6 @@
   </div>
   <div class="colResizer"></div>
   <div class="drawerCol" data-zone="drawer3">
-     <div class="kblock" data-block="tuning">
-      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Настройки модели</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
-      <div class="kblockBody"><div id="modelTuning"></div></div>
-     </div>
      <div class="kblock" data-block="advice">
       <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Рекомендация под этот ПК</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
       <div class="kblockBody"><div id="modelAdvice"></div></div>

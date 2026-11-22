@@ -383,16 +383,10 @@
       var port = text(data.port, text(engine.port, ''));
       var context = num(data.context, num(data.ctx, num(settings.context, null)));
       var html = '';
-      html += row('Модель', name ? name : 'нет данных');
       html += row('Размер', name || sizeGb !== null ? gbText(sizeGb) : 'нет данных');
-      html += row('Порт', port && port !== '0' ? port : '—');
       html += row('Контекст', context !== null && context > 0 ? (context + ' токенов') : '—');
       html += rowHtml('Статус', '<span style="color:' + (loaded ? 'var(--ok)' : 'var(--muted)') + '">' +
         esc(loaded ? 'загружена' : 'не загружена') + '</span>');
-      html += '<div class="row" style="border:0;padding:8px 0 0">' + (loaded
-        ? '<button class="ghost tiny" data-panels-act="unload">Выгрузить</button>'
-        : '<button class="ghost tiny" data-panels-act="load">Загрузить рекомендованную</button>') + '</div>';
-      if (window.patchBox) window.patchBox(box, html); else box.innerHTML = html;
       var loadBtn = box.querySelector('[data-panels-act="load"]');
       if (loadBtn) loadBtn.onclick = function () { loadModel(recommendedPath()); };
       var unloadBtn = box.querySelector('[data-panels-act="unload"]');

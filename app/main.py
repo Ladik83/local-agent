@@ -606,7 +606,7 @@ class Handler(BaseHTTPRequestHandler):
                     break
             if payload.get("mode") == "team" or cfg.get("use_team"):
                 orchestrator.run(task, cfg, emit, target)
-                agent.chat(convo, cfg, emit, target)
+            agent.chat(convo, cfg, emit, target)
         except RuntimeError as exc:
             if agent.STOP["flag"] or "остановлено" in str(exc):
                 emit({"type": "done", "messages": convo, "cancelled": True})

@@ -801,3 +801,18 @@ body.hugeFont { --fs: 19px; }
 #agentsInfoPanel button { margin: 0; }
 #agentsInfoPanel .mcpCard { margin: 6px 0; }
 #agentsInfoPanel h4 { margin: 14px 0 4px; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: .6px; }
+
+/* ---------- всё про модель — в правой панели ---------- */
+.railRight .modelPick { width: 100%; max-width: none; margin-bottom: 6px; }
+.modelBtns { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.modelBtns .sub { margin: 0; }
+.modelAddr {
+  border: 1px dashed var(--line); border-radius: var(--radius-sm);
+  padding: 6px 8px; margin: 6px 0; display: flex; flex-direction: column; gap: 4px;
+}
+.modelAddr code { font-size: 11.5px; color: var(--text); word-break: break-all; }
+.modelAddr button { align-self: flex-start; }
+#modelTuning { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+.agentMode { white-space: nowrap; }
+.agentMode.off { color: var(--muted); border-style: dashed; }
+.modes { padding: 2px 0 0; }

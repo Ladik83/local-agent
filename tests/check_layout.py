@@ -28,7 +28,7 @@ panels = (UI / "panels.js").read_text(encoding="utf-8")
 
 blocks = re.findall(r'class="kblock" data-block="([a-z]+)"', html)
 zones = re.findall(r'data-zone="([a-z0-9]+)"', html)
-check("10 блоков", len(blocks) == 10, ",".join(blocks))
+check("9 блоков (параметры внутри модели)", len(blocks) == 9, ",".join(blocks))
 check("5 зон", zones == ["left", "right", "drawer1", "drawer2", "drawer3"], ",".join(zones))
 check("нет дублей блоков", len(blocks) == len(set(blocks)))
 check("зоны на теле панелей", 'id="railLeftBody" data-zone="left"' in html and 'id="railRightBody" data-zone="right"' in html)
@@ -38,7 +38,7 @@ check("нет маркеров-заглушек", not re.findall(r"\[[A-Z][A-Z0-
 check("patchBox объявлен", "function patchBox(box, html)" in app)
 check("patchBox в глобальной области", "window.patchBox = patchBox" in app)
 check("renderStats не перерисовывает ресурсы", "monRes" not in app.split("function renderStats()")[1].split("async function pollStats()")[0])
-check("панели рисуют через patchBox", panels.count("window.patchBox(box, html)") >= 5,
+check("панели рисуют через patchBox", panels.count("window.patchBox(box, html)") >= 4,
       "мест: %d" % panels.count("window.patchBox(box, html)"))
 
 check("прокрутка не меняет ширину", "scrollbar-gutter: stable" in css)
@@ -55,9 +55,15 @@ check("слой подсказок", 'id="tipLayer"' in html and ".tipLayer" in 
 check("подсказки ролей в коде", "function wireRolesBlock()" in app and "showRoleTip" in app)
 check("список ролей рисуется", "function renderRolesMenu()" in app)
 
-row_html = html.split('class="modelRow"')[1].split('id="composer"')[0]
-check("режимы в строке модели", 'class="modes"' in row_html)
+center_html = html.split('id="composer"')[0].split('<div id="messages"')[1] if '<div id="messages"' in html else ''
+model_block = html.split('data-block="model"')[1].split('data-block="resources"')[0]
+check("режимы в центре чата", 'class="modes"' in center_html)
 check("короткие подписи режимов", ">Один<span" in html and ">Команда<span" in html)
+check("кнопка режима агента", 'id="agentModeBtn"' in center_html)
+check("выбор модели в правой панели", 'id="modelPick"' in model_block and 'id="modelLoadBtn"' in model_block)
+check("параметры модели рядом", 'id="modelTuning"' in model_block)
+check("отдельного блока настроек нет", 'data-block="tuning"' not in html)
+check("адрес сервера и копирование", 'id="modelAddr"' in model_block and 'id="modelAddrCopy"' in model_block)
 check("шаблоны компактные", "min-height: 24px" in css and ".templates { display: flex; gap: 4px" in css)
 check("селект модели сжимается", "flex: 1 1 220px" in css)
 check("шторка сворачивается в полосу", 'id="drawerHead"' in html and 'id="drawerSummary"' in html)

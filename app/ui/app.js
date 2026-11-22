@@ -108,6 +108,18 @@ function renderModelPicker() {
     else if (!models.length) hint.textContent = 'нет моделей — скачайте на вкладке «Модели»';
     else hint.textContent = '';
   }
+  const addr = document.getElementById('modelAddr');
+  const addrText = document.getElementById('modelAddrText');
+  if (addr && addrText) {
+    const port = engine.port || 0;
+    if (running && port) {
+      addrText.textContent = 'http://127.0.0.1:' + port + '/v1';
+      addr.hidden = false;
+    } else {
+      addr.hidden = true;
+      addrText.textContent = '';
+    }
+  }
 }
 
 function wireModelPicker() {
@@ -120,6 +132,48 @@ function wireModelPicker() {
     startModel(path);
   });
   if (unloadBtn) unloadBtn.addEventListener('click', unloadModel);
+  const copy = document.getElementById('modelAddrCopy');
+  if (copy) copy.addEventListener('click', copyModelAddress);
+}
+
+async function copyModelAddress() {
+  const text = (document.getElementById('modelAddrText') || {}).textContent || '';
+  if (!text) { toast('Сначала загрузите модель'); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Адрес скопирован: ' + text);
+  } catch (error) {
+    toast('Не удалось скопировать — выделите адрес вручную');
+  }
+}
+
+function agentModeOn() {
+  const settings = (STATE || {}).settings || {};
+  return settings.agent_mode !== false;
+}
+
+function renderAgentMode() {
+  const btn = document.getElementById('agentModeBtn');
+  if (!btn) return;
+  const on = agentModeOn();
+  btn.textContent = on ? 'Агент: вкл' : 'Агент: выкл';
+  btn.classList.toggle('off', !on);
+  btn.title = on
+    ? 'Режим агента: модель может читать файлы, искать по проекту, запускать проверки и вести план'
+    : 'Инструменты выключены: обычный чат без доступа к файлам и командам';
+}
+
+async function toggleAgentMode() {
+  const next = !agentModeOn();
+  await postJson('/api/settings', { agent_mode: next });
+  toast(next ? 'Режим агента включён' : 'Режим агента выключен — обычный чат');
+  await loadState();
+}
+
+function wireAgentMode() {
+  const btn = document.getElementById('agentModeBtn');
+  if (btn) btn.addEventListener('click', toggleAgentMode);
+  renderAgentMode();
 }
 
 async function unloadModel() {
@@ -2270,6 +2324,7 @@ function render() {
   if (document.getElementById('rolesMenu') && !document.getElementById('rolesMenu').hasAttribute('hidden')) {
     document.getElementById('rolesMenu').removeAttribute('hidden');
   }
+  renderAgentMode();
   renderLocalModels();
   renderCatalog();
   renderHfState();
@@ -3363,6 +3418,7 @@ bootStep('autostart', loadAutostart);
 bootStep('hf', wireModels);
 bootStep('attach', wireAttach);
 bootStep('modelPicker', wireModelPicker);
+bootStep('agentMode', wireAgentMode);
 bootStep('skins', wireSkins);
 bootStep('density', wireDensity);
 bootStep('drawerHeight', wireDrawerHeight);

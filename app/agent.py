@@ -215,6 +215,11 @@ def _prepare_context(cfg: dict, task: str, emit) -> dict:
 
 def _prepare_tools(cfg: dict, task: str, emit) -> dict:
     """Авто-выбор инструментов под задачу: один раз на запрос, с пометкой в чате."""
+    if cfg.get("agent_mode") is False:
+        cfg = dict(cfg)
+        cfg["_only_tools"] = []
+        emit({"type": "note", "text": "Режим агента выключен — отвечаю без инструментов"})
+        return cfg
     if not cfg.get("tools_auto") or not task:
         return cfg
     cfg = dict(cfg)
