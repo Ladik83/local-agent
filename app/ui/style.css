@@ -852,3 +852,9 @@ body.hugeFont { --fs: 19px; }
 .modes .agentMode:not(.off) { border-color: var(--accent); color: var(--text); }
 .modelAddr[hidden] { display: none; }
 #modelTuning input[type="number"], #modelTuning input[type="text"] { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 3px 6px; font: inherit; }
+
+/* повтор ответа под последним сообщением */
+.regenBar { display: flex; justify-content: flex-start; margin: -4px 0 10px 2px; }
+.regen { font: inherit; font-size: 11.5px; padding: 3px 9px; border-radius: 8px; background: var(--panel2); border: 1px solid var(--line); color: var(--muted); cursor: pointer; }
+.regen:hover { color: var(--text); border-color: var(--accent); }
+.regen:disabled { opacity: .6; cursor: default; }

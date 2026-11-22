@@ -619,14 +619,12 @@ function wireAttach() {
   dropHintOpen(false);
 }
 
+let LAST_ASK = { content: '', images: [] };
+
 async function send() {
   const input = document.getElementById('input');
   const text = input.value.trim();
   if (!text || BUSY) return;
-  BUSY = true;
-  document.getElementById('send').disabled = true;
-  const stopBtn = document.getElementById('stopBtn');
-  if (stopBtn) stopBtn.style.display = '';
   input.value = '';
   let fullText = text;
   let images = [];
@@ -639,7 +637,17 @@ async function send() {
     ATTACH.length = 0;
     renderAttach();
   }
-  addMsg('user', text);
+  await runTurn(fullText, text, images);
+}
+
+async function runTurn(fullText, displayText, images) {
+  if (BUSY) return;
+  BUSY = true;
+  LAST_ASK = { content: fullText, images: images || [] };
+  document.getElementById('send').disabled = true;
+  const stopBtn = document.getElementById('stopBtn');
+  if (stopBtn) stopBtn.style.display = '';
+  addMsg('user', displayText);
   HISTORY.push({ role: 'user', content: fullText });
   let bubble = addMsg('bot', '');
   bubble.innerHTML = '<span class="typing">думаю…</span>';
@@ -722,6 +730,7 @@ async function send() {
       saveChat();
       speakAnswer();
       loadPlan();
+      attachRegen(bubble);
     } else if (event.type === 'error') {
       answer += '\n\nОшибка: ' + event.text;
       paint();
@@ -760,6 +769,49 @@ async function send() {
   const stopReset = document.getElementById('stopBtn');
   if (stopReset) stopReset.style.display = 'none';
   paint();
+  if (!document.querySelector('.regenBar')) attachRegen(bubble);
+}
+
+function attachRegen(bubble) {
+  Array.prototype.forEach.call(document.querySelectorAll('.regenBar'), function (bar) { bar.remove(); });
+  if (!bubble) return;
+  const bar = document.createElement('div');
+  bar.className = 'regenBar';
+  const button = document.createElement('button');
+  button.className = 'regen';
+  button.type = 'button';
+  button.textContent = '↻ Перегенерировать';
+  button.title = 'Задать тот же вопрос заново — ответ будет другим';
+  button.addEventListener('click', regenerate);
+  bar.appendChild(button);
+  bubble.insertAdjacentElement('afterend', bar);
+}
+
+function redrawHistory() {
+  const box = document.getElementById('messages');
+  if (!box) return;
+  box.innerHTML = '';
+  let lastBot = null;
+  HISTORY.forEach(function (message) {
+    if (!message.content) return;
+    const node = addMsg(message.role === 'user' ? 'user' : 'bot', message.content);
+    if (message.role !== 'user') lastBot = node;
+  });
+  return lastBot;
+}
+
+async function regenerate() {
+  if (BUSY) { toast('Дождитесь ответа или остановите его'); return; }
+  let index = -1;
+  for (let i = HISTORY.length - 1; i >= 0; i -= 1) {
+    if (HISTORY[i].role === 'user') { index = i; break; }
+  }
+  if (index < 0) { toast('Нет вопроса, который можно повторить'); return; }
+  const question = HISTORY[index];
+  const images = (LAST_ASK.content === question.content) ? (LAST_ASK.images || []) : [];
+  HISTORY = HISTORY.slice(0, index);
+  redrawHistory();
+  await runTurn(question.content, question.content, images);
 }
 
 async function startModel(path) {
@@ -1982,10 +2034,13 @@ async function openChat(id) {
   HISTORY = (data.messages || []).filter(function (m) { return m.role === 'user' || m.role === 'assistant'; });
   const box = document.getElementById('messages');
   box.innerHTML = '';
+  let lastBot = null;
   HISTORY.forEach(function (message) {
     if (!message.content) return;
-    addMsg(message.role === 'user' ? 'user' : 'bot', message.content);
+    const node = addMsg(message.role === 'user' ? 'user' : 'bot', message.content);
+    if (message.role !== 'user') lastBot = node;
   });
+  attachRegen(lastBot);
   renderChats();
   loadPlan();
 }
