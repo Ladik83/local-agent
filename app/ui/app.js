@@ -940,10 +940,147 @@ function wireDrawerHeight() {
   });
 }
 
+const LAYOUT_KEY = 'agentLayout.v2';
+const COLLAPSE_KEY = 'agentBlocksCollapsed';
+
+function layoutZones() {
+  return Array.prototype.slice.call(document.querySelectorAll('[data-zone]'));
+}
+
+function saveLayout() {
+  const layout = {};
+  layoutZones().forEach(function (zone) {
+    layout[zone.dataset.zone] = Array.prototype.slice.call(zone.children)
+      .filter(function (child) { return child.classList && child.classList.contains('kblock'); })
+      .map(function (block) { return block.dataset.block; });
+  });
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch (error) { return; }
+}
+
+function applyLayout() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) || 'null'); } catch (error) { saved = null; }
+  if (!saved) return;
+  const blocks = {};
+  document.querySelectorAll('.kblock').forEach(function (block) { blocks[block.dataset.block] = block; });
+  layoutZones().forEach(function (zone) {
+    (saved[zone.dataset.zone] || []).forEach(function (id) {
+      if (blocks[id]) zone.appendChild(blocks[id]);
+    });
+  });
+}
+
+function wireLayoutDrag() {
+  let dragged = null;
+  document.querySelectorAll('.kblockHead').forEach(function (head) {
+    head.addEventListener('dragstart', function (event) {
+      dragged = head.parentElement;
+      dragged.classList.add('dragging');
+      try {
+        event.dataTransfer.setData('text/plain', dragged.dataset.block);
+        event.dataTransfer.effectAllowed = 'move';
+      } catch (error) { return; }
+    });
+    head.addEventListener('dragend', function () {
+      if (dragged) dragged.classList.remove('dragging');
+      dragged = null;
+      document.querySelectorAll('.dropActive').forEach(function (zone) { zone.classList.remove('dropActive'); });
+    });
+  });
+  layoutZones().forEach(function (zone) {
+    zone.addEventListener('dragover', function (event) { event.preventDefault(); zone.classList.add('dropActive'); });
+    zone.addEventListener('dragleave', function () { zone.classList.remove('dropActive'); });
+    zone.addEventListener('drop', function (event) {
+      event.preventDefault();
+      zone.classList.remove('dropActive');
+      if (!dragged) return;
+      const target = event.target.closest ? event.target.closest('.kblock') : null;
+      if (target && target !== dragged && zone.contains(target)) zone.insertBefore(dragged, target);
+      else zone.appendChild(dragged);
+      saveLayout();
+    });
+  });
+}
+
+function wireBlockCollapse() {
+  let state = {};
+  try { state = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}'); } catch (error) { state = {}; }
+  document.querySelectorAll('.kblock').forEach(function (block) {
+    const id = block.dataset.block;
+    if (state[id]) block.classList.add('collapsed');
+    const toggle = block.querySelector('.kCollapse');
+    if (!toggle) return;
+    toggle.addEventListener('click', function () {
+      block.classList.toggle('collapsed');
+      state[id] = block.classList.contains('collapsed');
+      try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(state)); } catch (error) { return; }
+    });
+  });
+}
+
+function wireRailResizers() {
+  const savedLeft = parseInt(localStorage.getItem('agentRailLeft') || '0', 10);
+  const savedRight = parseInt(localStorage.getItem('agentRailRight') || '0', 10);
+  const left = document.getElementById('railLeft');
+  const right = document.getElementById('railRight');
+  if (left && savedLeft > 180) left.style.width = savedLeft + 'px';
+  if (right && savedRight > 180) right.style.width = savedRight + 'px';
+  document.querySelectorAll('.railResizer').forEach(function (bar) {
+    bar.addEventListener('pointerdown', function (event) {
+      const side = bar.dataset.resize;
+      const rail = document.getElementById(side === 'left' ? 'railLeft' : 'railRight');
+      if (!rail) return;
+      const startX = event.clientX;
+      const startWidth = rail.getBoundingClientRect().width;
+      const move = function (inner) {
+        const delta = side === 'left' ? inner.clientX - startX : startX - inner.clientX;
+        const width = Math.max(200, Math.min(480, startWidth + delta));
+        rail.style.width = Math.round(width) + 'px';
+      };
+      const stop = function () {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', stop);
+        try {
+          localStorage.setItem(side === 'left' ? 'agentRailLeft' : 'agentRailRight',
+            String(Math.round(rail.getBoundingClientRect().width)));
+        } catch (error) { return; }
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', stop);
+      event.preventDefault();
+    });
+  });
+}
+
+function toggleRail(side) {
+  const rail = document.getElementById(side === 'left' ? 'railLeft' : 'railRight');
+  if (rail) rail.classList.toggle('open');
+}
+
+function resetLayout() {
+  ['agentLayout.v2', 'agentBlocksCollapsed', 'agentRailLeft', 'agentRailRight', 'agentDrawerH', 'agentDrawerOpen'].forEach(function (key) {
+    try { localStorage.removeItem(key); } catch (error) { return; }
+  });
+  location.reload();
+}
+
+function wireLayout() {
+  applyLayout();
+  wireLayoutDrag();
+  wireBlockCollapse();
+  wireRailResizers();
+  const reset = document.getElementById('layoutReset');
+  if (reset) reset.addEventListener('click', resetLayout);
+  try {
+    if (localStorage.getItem('agentDrawerOpen') === '0') document.getElementById('drawer').classList.remove('open');
+  } catch (error) { return; }
+}
+
 function toggleDrawer() {
   const drawer = document.getElementById('drawer');
   if (!drawer) return;
   drawer.classList.toggle('open');
+  try { localStorage.setItem('agentDrawerOpen', drawer.classList.contains('open') ? '1' : '0'); } catch (error) { return; }
   const chevron = document.getElementById('sbChevron');
   if (chevron) chevron.textContent = drawer.classList.contains('open') ? '▾' : '▴';
 }
@@ -1202,6 +1339,11 @@ function render() {
   renderTuning();
   if (window.Panels && window.Panels.renderAll) {
     try { window.Panels.renderAll(); } catch (error) { console.error('panels', error); }
+  }
+  const rolesHint = document.getElementById('kRolesHint');
+  if (rolesHint) {
+    const count = ((STATE.team || {}).roles || []).length;
+    rolesHint.textContent = count ? (count + ' ролей, режим ' + (STATE.team.enabled ? 'включён' : 'выключен')) : '';
   }
   renderLocalModels();
   renderCatalog();
@@ -2298,6 +2440,7 @@ bootStep('modelPicker', wireModelPicker);
 bootStep('skins', wireSkins);
 bootStep('density', wireDensity);
 bootStep('drawerHeight', wireDrawerHeight);
+bootStep('layout', wireLayout);
 bootStep('drop', wireDrop);
 bootStep('embeddings', wireEmbeddings);
 loadState().catch(function (err) { toast('Не удалось получить состояние: ' + err.message); });

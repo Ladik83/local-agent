@@ -27,6 +27,26 @@
 
 <main>
  <section id="view-chat" class="view active">
+  <div class="chatLayout" id="chatLayout">
+   <aside class="rail railLeft" id="railLeft">
+    <div class="railHead">Левая панель</div>
+    <div class="railBody" id="railLeftBody" data-zone="left">
+     <div class="kblock" data-block="chats">
+      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Чаты</b><button class="ghost tiny kBtn" onclick="newChat()">+</button><button class="kCollapse" title="Свернуть блок">▾</button></div>
+      <div class="kblockBody"><div id="chatsList"></div></div>
+     </div>
+     <div class="kblock" data-block="projects">
+      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Проекты и рабочие папки</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
+      <div class="kblockBody"><div id="projectsList"></div><div class="accAdd"><input id="projPath" type="text" placeholder="C:\путь\к\папке"><button class="ghost tiny" onclick="addProject()">+</button></div></div>
+     </div>
+     <div class="kblock" data-block="roles">
+      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Роли</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
+      <div class="kblockBody"><div class="sub" id="kRolesHint"></div><button class="ghost tiny" onclick="document.querySelector('.tab[data-tab=&quot;agents&quot;]').click()">Открыть таблицу ролей</button></div>
+     </div>
+    </div>
+   </aside>
+   <div class="colResizer railResizer" data-resize="left" title="Левая панель"></div>
+   <div class="chatCenter">
  <div id="messages" class="messages"></div>
  <div class="modes">
  <button class="mode active" data-mode="agent">Один помощник<span class="help" data-tip="Обычный режим: на ваш вопрос отвечает одна модель. Быстро и просто — для повседневных задач.">?</span></button>
@@ -56,6 +76,26 @@
  <button id="micBtn" class="ghost" title="Голос: Ctrl+Alt+Space">🎤</button>
  <button id="send" class="primary" title="Отправить">Отправить</button>
  </div>
+   </div>
+   <div class="colResizer railResizer" data-resize="right" title="Правая панель"></div>
+   <aside class="rail railRight" id="railRight">
+    <div class="railHead">Правая панель</div>
+    <div class="railBody" id="railRightBody" data-zone="right">
+     <div class="kblock" data-block="model">
+      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Модель</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
+      <div class="kblockBody"><div id="monModel"></div></div>
+     </div>
+     <div class="kblock" data-block="resources">
+      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Ресурсы</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
+      <div class="kblockBody"><div id="monRes"></div></div>
+     </div>
+     <div class="kblock" data-block="now">
+      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Что происходит сейчас</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
+      <div class="kblockBody"><div id="monNow"></div></div>
+     </div>
+    </div>
+   </aside>
+  </div>
  </section>
 
  <section id="view-models" class="view">
@@ -217,29 +257,32 @@
  </section>
 </main>
 
-<div class="drawer" id="drawer">
+<div class="drawer open" id="drawer">
  <div class="drawerResize" id="drawerResize" title="Потяните, чтобы изменить высоту"></div>
- <div class="drawerGrid">
-  <div class="drawerCol">
-   <h4>Проекты и рабочие папки</h4>
-   <div id="projectsList"></div>
-   <div class="accAdd"><input id="projPath" type="text" placeholder="C:\путь\к\папке"><button class="ghost tiny" onclick="addProject()">+</button></div>
+ <div class="drawerGrid" id="drawerGrid">
+  <div class="drawerCol" data-zone="drawer1">
+     <div class="kblock" data-block="tokens">
+      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Токены и скорость</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
+      <div class="kblockBody"><div id="monTokens"></div></div>
+     </div>
   </div>
   <div class="colResizer"></div>
-  <div class="drawerCol">
-   <h4>Чаты<button class="ghost tiny colBtn" onclick="newChat()">+ новый</button></h4>
-   <div id="chatsList"></div>
-   <h4>Токены и скорость</h4>
-   <div id="monTokens"></div>
+  <div class="drawerCol" data-zone="drawer2">
+     <div class="kblock" data-block="computer">
+      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Компьютер</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
+      <div class="kblockBody"><div id="hwCard"></div></div>
+     </div>
   </div>
   <div class="colResizer"></div>
-  <div class="drawerCol">
-   <details class="acc" open><summary>Компьютер</summary><div id="hwCard"></div></details>
-   <details class="acc" open><summary>Ресурсы</summary><div id="monRes"></div></details>
-   <details class="acc" open><summary>Модель</summary><div id="monModel"></div></details>
-   <details class="acc"><summary>Рекомендация под этот ПК</summary><div id="modelAdvice"></div></details>
-   <details class="acc"><summary>Настройки модели</summary><div id="modelTuning"></div></details>
-   <details class="acc" open><summary>Что происходит сейчас</summary><div id="monNow"></div></details>
+  <div class="drawerCol" data-zone="drawer3">
+     <div class="kblock" data-block="tuning">
+      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Настройки модели</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
+      <div class="kblockBody"><div id="modelTuning"></div></div>
+     </div>
+     <div class="kblock" data-block="advice">
+      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Рекомендация под этот ПК</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
+      <div class="kblockBody"><div id="modelAdvice"></div></div>
+     </div>
   </div>
  </div>
 </div>
@@ -252,6 +295,8 @@
  <span class="sbItem" id="sbTok">токены —</span>
  <span class="sbItem" id="sbSpeed">— ток/с</span>
  <span class="sbItem" id="sbNow">ожидание</span>
+ <button class="sbBtn sbRailBtn" id="sbLeftRail" onclick="toggleRail('left')">Левая панель</button>
+ <button class="sbBtn sbRailBtn" id="sbRightRail" onclick="toggleRail('right')">Правая панель</button>
  <span class="sbRight"><span id="sbPort">порт —</span> · <span id="sbVersion">v0.4</span></span>
 </footer>
 
@@ -279,7 +324,8 @@
    <div class="row"><span>Иконка в трее</span><input type="checkbox" id="gearTray"></div>
    <div class="row"><span>Порт</span><span class="sub" id="gearPort">—</span></div>
   </div>
-  <div class="row"><span></span><button class="primary" id="gearClose">Готово</button></div>
+  <div class="row"><span>Вернуть блоки на свои места и ширину панелей по умолчанию</span><button class="ghost" id="layoutReset">Сбросить раскладку</button></div>
+ <div class="row"><span></span><button class="primary" id="gearClose">Готово</button></div>
  </div>
 </div>
 <div class="modalBack" id="helpModal">
