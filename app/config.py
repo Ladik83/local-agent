@@ -105,6 +105,9 @@ DEFAULTS: dict = {
     "engine_variant": None,      # vulkan | cpu
     "last_model": None,
     "embed_model": None,
+    "vision_model": "",            # путь к VL-модели; пусто — самая лёгкая с mmproj
+    "vision_context": 0,           # 0 — взять min(context, 8192)
+    "vision_enabled": True,        # картинки разбирает модель зрения
     "update_pubkey": "",          # открытый ключ ECDSA P-256 для подписи манифеста
     "telegram_chat": "",          # куда бот пишет отчёты
     "context": 8192,             # размер контекста

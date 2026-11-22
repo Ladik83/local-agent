@@ -3,12 +3,14 @@ from __future__ import annotations
 
 from . import diag
 
+import base64
 import json
+import pathlib
 import time
 import urllib.error
 import urllib.request
 
-from . import engine, stats, tools
+from . import engine, stats, tools, vision
 
 MAX_STEPS = 8
 STOP = {"flag": False}
@@ -30,9 +32,47 @@ def _open(payload: dict, target: dict):
 	return urllib.request.urlopen(req, timeout=900)
 
 
-def _call(convo: list, cfg: dict, emit, target: dict):
+def _image_parts(paths) -> list:
+    """Локальные файлы картинок → части сообщения в формате OpenAI (data URL)."""
+    parts = []
+    for raw in paths or []:
+        item = pathlib.Path(str(raw))
+        if not item.is_file():
+            continue
+        try:
+            data = item.read_bytes()
+        except OSError:
+            continue
+        mime = vision.MIME.get(item.suffix.lower(), "image/png")
+        parts.append({"type": "image_url",
+                      "image_url": {"url": "data:%s;base64,%s" % (mime, base64.b64encode(data).decode("ascii"))}})
+    return parts
+
+
+def _clean(messages: list) -> list:
+    """Сообщения без служебного поля images — для истории и события done."""
+    return [{key: value for key, value in item.items() if key != "images"} for item in messages]
+
+
+def _with_images(messages: list) -> list:
+    """Сообщения с полем images превращаем в мультимодальные части контента."""
+    out = []
+    for item in messages:
+        images = item.get("images") or []
+        if not images:
+            out.append({key: value for key, value in item.items() if key != "images"})
+            continue
+        parts = [{"type": "text", "text": str(item.get("content") or "")}]
+        parts.extend(_image_parts(images))
+        clean = {key: value for key, value in item.items() if key not in ("images", "content")}
+        clean["content"] = parts
+        out.append(clean)
+    return out
+
+
+def _call(convo: list, cfg: dict, emit, target: dict, allow_tools: bool = True):
     payload = {
-        "messages": [{"role": "system", "content": cfg["system_prompt"]}] + list(convo),
+        "messages": [{"role": "system", "content": cfg["system_prompt"]}] + _with_images(list(convo)),
         "stream": True,
         "temperature": float(cfg.get("temperature") or 0.7),
         "tool_choice": "auto",
@@ -40,9 +80,11 @@ def _call(convo: list, cfg: dict, emit, target: dict):
     if (target or {}).get("model"):
         payload["model"] = target["model"]
     payload["stream_options"] = {"include_usage": True}
-    allowed = tools.schemas(cfg)
+    allowed = tools.schemas(cfg) if allow_tools else []
     if allowed:
         payload["tools"] = allowed
+    if not allow_tools:
+        payload.pop("tool_choice", None)
     text = ""
     calls = {}
     usage = {}
@@ -99,6 +141,15 @@ def _call(convo: list, cfg: dict, emit, target: dict):
     return text, ordered
 
 
+def chat_plain(convo: list, cfg: dict, emit, target: dict) -> list:
+    """Один ответ без инструментов — для моделей зрения и простых задач."""
+    convo = list(convo)
+    text, _calls = _call(convo, cfg, emit, target, allow_tools=False)
+    convo.append({"role": "assistant", "content": text})
+    emit({"type": "done", "messages": _clean(convo)})
+    return convo
+
+
 def chat(convo: list, cfg: dict, emit, target: dict = None) -> list:
     """Полный цикл: ответ, инструменты, ответ. emit получает события для UI."""
     convo = _compact(list(convo), cfg, emit, target)
@@ -127,7 +178,7 @@ def chat(convo: list, cfg: dict, emit, target: dict = None) -> list:
             emit({"type": "tool_result", "name": name, "text": result[:800]})
             convo.append({"role": "tool", "tool_call_id": item["id"], "content": result})
         convo = _compact(convo, cfg, emit, target)
-    emit({"type": "done", "messages": convo})
+    emit({"type": "done", "messages": _clean(convo)})
     return convo
 
 

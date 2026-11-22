@@ -26,7 +26,7 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 EXE = "llama-server.exe" if os.name == "nt" else "llama-server"
 
 JOB = {"active": False, "kind": "", "pct": 0.0, "text": "", "error": None, "result": None}
-SERVER = {"proc": None, "port": None, "model": None, "started": 0.0, "error": None}
+SERVER = {"proc": None, "port": None, "model": None, "projector": "", "started": 0.0, "error": None}
 LOCK = threading.Lock()
 
 
@@ -243,6 +243,27 @@ def _healthy(port: int, timeout: float) -> bool:
     return False
 
 
+def find_projector(model_path) -> str:
+    """Проектор зрения к модели: mmproj*.gguf в той же папке (или пусто)."""
+    path = pathlib.Path(str(model_path or ""))
+    if not path.is_file():
+        return ""
+    words = {word for word in path.stem.lower().replace("-", " ").replace("_", " ").split() if len(word) > 2}
+    best = ""
+    best_score = -1.0
+    for item in sorted(path.parent.glob("mmproj*.gguf")):
+        name_words = {word for word in item.name.lower().replace("-", " ").replace("_", " ").replace(".", " ").split() if len(word) > 2}
+        overlap = len(words & name_words)
+        try:
+            size = item.stat().st_size
+        except OSError:
+            size = 0
+        score = overlap * 10 + (2 if ("f16" in item.name.lower() or "bf16" in item.name.lower()) else 0) + size / 2 ** 30
+        if score > best_score:
+            best, best_score = str(item), score
+    return best
+
+
 def start(model_path: str, ctx=None, ngl=None) -> dict:
     """Поднять llama-server под модель."""
     cfg = config.load()
@@ -258,8 +279,11 @@ def start(model_path: str, ctx=None, ngl=None) -> dict:
     ctx = int(ctx or cfg.get("context") or 8192)
     ngl = int(ngl if ngl is not None else (cfg.get("ngl") or 99))
     log_path = config.LOGS_DIR / "llama-server.log"
+    projector = find_projector(model_path)
     cmd = [exe, "-m", model_path, "--host", "127.0.0.1", "--port", str(port),
            "-c", str(ctx), "-ngl", str(ngl), "--no-warmup", "--embeddings", "--pooling", "mean"]
+    if projector:
+        cmd += ["--mmproj", projector]
     last_log = ""
     for extra in (["--jinja"], []):
         handle = open(str(log_path), "w", encoding="utf-8", errors="replace")
@@ -269,7 +293,7 @@ def start(model_path: str, ctx=None, ngl=None) -> dict:
                                     creationflags=NO_WINDOW)
         except OSError as exc:
             return {"ok": False, "error": "не удалось запустить llama-server: %s" % exc}
-        SERVER.update({"proc": proc, "port": port, "model": model_path,
+        SERVER.update({"proc": proc, "port": port, "model": model_path, "projector": projector,
                        "started": time.time(), "error": None})
         if _healthy(port, 300):
             return {"ok": True, "port": port, "log": str(log_path)}

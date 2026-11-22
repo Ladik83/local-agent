@@ -15,7 +15,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import agent, attach, autostart, catalog, chats as chats_mod, hf, schedule, chats, config, drives, embed, engine, hardware, keystore, mcp, orchestrator, panels, providers, rag, roles, scan, stats, tools, updater, voice
+from . import agent, attach, autostart, catalog, chats as chats_mod, hf, schedule, chats, config, drives, embed, engine, hardware, keystore, mcp, orchestrator, panels, providers, rag, roles, scan, stats, tools, updater, vision, voice
 
 UI_DIR = pathlib.Path(__file__).parent / "ui"
 TOKEN_FILE = config.DATA_DIR / "access.token"
@@ -99,6 +99,7 @@ def state() -> dict:
         "catalog": [dict(c, url=catalog.url(c)) for c in catalog.CATALOG],
         "hf": {"token_set": bool(keystore.get("hf_token"))},
         "embeddings": embed.status(),
+        "vision": vision.status(),
         "download": dict(DL),
         "server": {"running": bool(engine.base_url()), "port": engine.SERVER.get("port"),
                    "model": engine.SERVER.get("model")},
@@ -196,6 +197,20 @@ def _embeddings_check() -> dict:
     if not probe:
         return {"ok": False, "error": "модель эмбеддингов не запустилась"}
     return {"ok": True, "dim": len(probe[0]), "model": path}
+
+
+def _attach_images(convo: list, images: list) -> list:
+    """Картинки кладём в последнее сообщение пользователя (поле images)."""
+    out = [dict(item) for item in convo]
+    for item in reversed(out):
+        if item.get("role") == "user":
+            item["images"] = list(images)
+            break
+    return out
+
+
+def _strip_images(convo: list) -> list:
+    return [{key: value for key, value in item.items() if key != "images"} for item in convo]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -326,7 +341,9 @@ class Handler(BaseHTTPRequestHandler):
                         diag.warn("hf/files", exc)
                         self._send({"ok": False, "error": str(exc), "files": []})
             elif route == "/api/stats":
-                self._send(stats.snapshot())
+                snapshot = stats.snapshot()
+                snapshot["vision"] = vision.status()
+                self._send(snapshot)
             elif route == "/api/chats":
                 self._send({"chats": chats.list_all()})
             elif route == "/api/chats/get":
@@ -334,6 +351,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(chats.load((query.get("id") or [""])[0]))
             elif route == "/api/job":
                 self._send({"engine": dict(engine.JOB), "download": dict(DL), "discover": dict(DISC)})
+            elif route == "/api/vision/models":
+                cfg = config.load()
+                self._send({"ok": True, "items": vision.candidates(cfg), "pick": vision.pick(cfg),
+                            "status": vision.status()})
             elif route == "/api/panels":
                 self._send(panels.snapshot())
             elif route == "/api/telegram":
@@ -413,6 +434,25 @@ class Handler(BaseHTTPRequestHandler):
         agent.STOP["flag"] = False
         try:
             target = providers.resolve(cfg)
+            images = [str(item) for item in (payload.get("images") or []) if str(item) and pathlib.Path(str(item)).is_file()]
+            if images:
+                convo = _attach_images(convo, images)
+                main_sees = bool(engine.SERVER.get("projector")) or (
+                    target.get("kind") == "local" and bool(engine.find_projector(str(cfg.get("last_model") or ""))))
+                if not main_sees:
+                    if not cfg.get("vision_enabled", True):
+                        emit({"type": "note", "text": "Зрение выключено в настройках — читаю только текст"})
+                        convo = _strip_images(convo)
+                    else:
+                        emit({"type": "note", "text": "Загружаю модель зрения…"})
+                        started = vision.start(str(cfg.get("vision_model") or ""))
+                        if started.get("ok"):
+                            emit({"type": "note", "text": "Картинки разбирает " + pathlib.Path(str(started.get("model") or "")).name})
+                            agent.chat_plain(convo, cfg, emit, {"kind": "local", "base_url": vision.base_url(),
+                                                               "model": "", "api_key": ""})
+                            return
+                        emit({"type": "note", "text": "Модель зрения не поднялась: " + str(started.get("error") or "")})
+                        convo = _strip_images(convo)
             if target["kind"] == "local" and not target.get("base_url"):
                 model = cfg.get("last_model")
                 started = engine.start(model) if model else {"ok": False, "error": "модель не выбрана"}
@@ -474,6 +514,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({"ok": True})
             elif route == "/api/model/download":
                 self._send(start_download(data.get("id", "")))
+            elif route == "/api/vision/start":
+                awaited = vision.start(str(data.get("path") or ""))
+                self._send(awaited)
+            elif route == "/api/vision/stop":
+                vision.stop()
+                self._send({"ok": True})
             elif route == "/api/embeddings/check":
                 self._send(_embeddings_check())
             elif route == "/api/rag/reindex":
@@ -788,6 +834,10 @@ def run(port: int = 7867, open_browser: bool = True):
         engine.embed_cleanup()
     except Exception as exc:
         diag.warn("main.py:embed_cleanup", exc)
+    try:
+        vision.cleanup()
+    except Exception as exc:
+        diag.warn("main.py:vision_cleanup", exc)
     url = "http://" + HOST + ":%d/" % port
     if _alive(port):
         print("Приложение уже запущено: " + url, flush=True)

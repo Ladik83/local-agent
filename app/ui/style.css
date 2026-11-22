@@ -695,3 +695,8 @@ body.hugeFont { --fs: 19px; }
   .modelRow { flex-wrap: wrap; }
   .modelRow .modes { margin-left: 0; }
 }
+
+/* ---------- зрение ---------- */
+#visionModel { max-width: 460px; }
+.attachChip.image { border-color: var(--accent); }
+.attachChip.image::before { content: '🖼 '; }

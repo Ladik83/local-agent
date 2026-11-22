@@ -186,6 +186,7 @@ function renderSettings() {
     '<button class="ghost" onclick="installEngine(\'cpu\')">CPU</button></span></div>';
   html += '<div class="sub">' + (e.exe ? 'Файл: ' + esc(e.exe) : 'llama.cpp будет скачан в папку приложения') + '</div>';
   document.getElementById('enginePanel').innerHTML = html;
+  renderVisionSettings();
 }
 
 let POLL = null;
@@ -228,19 +229,116 @@ async function cancelGeneration() {
 
 const ATTACH = [];
 
+const VISION_LABELS = {"vision_row": "Зрение: разбирать картинки", "vision_model": "Модель зрения", "vision_auto": "авто — самая лёгкая с проектором", "vision_check": "Запустить", "vision_stop": "Выгрузить", "vision_hint": "Если у основной модели рядом лежит mmproj, картинки идут в неё. Иначе при первой картинке поднимется отдельная модель зрения и останется в памяти.", "vision_running": "Зрение: работает", "vision_idle": "Зрение: не запущено", "vision_missing": "Зрение: нет моделей с проектором", "attach_image_hint": "Картинку разберёт модель зрения", "vision_note": "Модель зрения"};
+
+let VISION_ITEMS = null;
+
 function renderAttach() {
   const bar = document.getElementById('attachBar');
   if (!bar) return;
   bar.innerHTML = '';
   ATTACH.forEach(function (item, index) {
     const chip = document.createElement('span');
-    chip.className = 'attachChip';
-    chip.textContent = item.name + ' · ' + (item.chars < 1000 ? item.chars + ' зн.' : Math.round(item.chars / 100) / 10 + 'k');
+    chip.className = 'attachChip' + (item.kind === 'image' ? ' image' : '');
+    if (item.kind === 'image') {
+      chip.textContent = item.name;
+      chip.title = VISION_LABELS.attach_image_hint;
+    } else {
+      chip.textContent = item.name + ' · ' + (item.chars < 1000 ? item.chars + ' зн.' : Math.round(item.chars / 100) / 10 + 'k');
+    }
     const drop = document.createElement('button');
     drop.textContent = '×';
     drop.onclick = function () { ATTACH.splice(index, 1); renderAttach(); };
     chip.appendChild(drop);
     bar.appendChild(chip);
+  });
+}
+
+async function loadVisionModels() {
+  if (VISION_ITEMS) return VISION_ITEMS;
+  try {
+    const data = await (await fetch('/api/vision/models')).json();
+    VISION_ITEMS = data.items || [];
+    return VISION_ITEMS;
+  } catch (error) {
+    VISION_ITEMS = [];
+    return [];
+  }
+}
+
+async function renderVisionSettings() {
+  const select = document.getElementById('visionModel');
+  const toggle = document.getElementById('visionEnabled');
+  const state = document.getElementById('visionState');
+  if (!select) return;
+  const settings = (STATE || {}).settings || {};
+  const info = (STATE || {}).vision || {};
+  if (toggle) toggle.checked = settings.vision_enabled !== false;
+  const items = await loadVisionModels();
+  const current = settings.vision_model || '';
+  const options = ['<option value="">' + VISION_LABELS.vision_auto + '</option>'];
+  items.forEach(function (item) {
+    const label = item.name + ' · ' + item.size_gb + ' ГБ';
+    options.push('<option value="' + esc(item.id) + '">' + esc(label) + '</option>');
+  });
+  select.innerHTML = options.join('');
+  const values = Array.prototype.map.call(select.options, function (option) { return option.value; });
+  select.value = values.indexOf(current) >= 0 ? current : '';
+  if (state) {
+    if (info.running) {
+      state.textContent = VISION_LABELS.vision_running + ' · ' + (info.model || '') +
+        (info.memory_mb ? ' · ' + info.memory_mb + ' МБ · порт ' + info.port : '');
+    } else if (!items.length) {
+      state.textContent = VISION_LABELS.vision_missing;
+    } else {
+      state.textContent = VISION_LABELS.vision_idle + ' · моделей с проектором: ' + items.length;
+    }
+  }
+}
+
+async function checkVision() {
+  const select = document.getElementById('visionModel');
+  const path = select ? select.value : '';
+  toast('Запускаю модель зрения, первый запуск занимает до минуты');
+  try {
+    const resp = await fetch('/api/vision/start', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path })
+    });
+    const data = await resp.json();
+    toast(data.ok ? ('Зрение готово: ' + String(data.model || '').split(/[\\/]/).pop()) : (data.error || 'ошибка'));
+    await loadState();
+  } catch (error) {
+    toast('Ошибка: ' + error.message);
+  }
+}
+
+async function stopVision() {
+  await fetch('/api/vision/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  toast('Модель зрения выгружена');
+  await loadState();
+}
+
+function wireVision() {
+  const check = document.getElementById('visionCheck');
+  const stop = document.getElementById('visionStop');
+  const select = document.getElementById('visionModel');
+  const toggle = document.getElementById('visionEnabled');
+  if (check) check.addEventListener('click', checkVision);
+  if (stop) stop.addEventListener('click', stopVision);
+  if (select) select.addEventListener('change', async function () {
+    await fetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vision_model: select.value })
+    });
+    toast('Модель зрения сохранена');
+    await loadState();
+  });
+  if (toggle) toggle.addEventListener('change', async function () {
+    await fetch('/api/settings', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vision_enabled: toggle.checked })
+    });
+    toast(toggle.checked ? 'Зрение включено' : 'Зрение выключено');
   });
 }
 
@@ -274,7 +372,8 @@ async function attachFile(file) {
   const res = await postJson('/api/attach/upload', { name: file.name, data: data });
   if (hint) { hint.textContent = before; hint.classList.remove('on'); }
   if (!res || !res.ok) { toast('Файл не прочитан: ' + ((res && res.error) || 'ошибка')); return; }
-  ATTACH.push({ name: res.name, text: res.text || '', chars: res.chars || 0 });
+  ATTACH.push({ name: res.name, text: res.text || '', chars: res.chars || 0,
+    kind: res.kind || 'text', path: res.path || '' });
   renderAttach();
   toast('Прикреплено: ' + res.name);
 }
@@ -323,9 +422,13 @@ async function send() {
   if (stopBtn) stopBtn.style.display = '';
   input.value = '';
   let fullText = text;
+  let images = [];
   if (ATTACH.length) {
-    const parts = ATTACH.map(function (item) { return 'Файл ' + item.name + ':\n' + item.text; });
-    fullText = parts.join('\n\n') + (text ? '\n\n' + text : '');
+    images = ATTACH.filter(function (item) { return item.kind === 'image' && item.path; })
+      .map(function (item) { return item.path; });
+    const parts = ATTACH.filter(function (item) { return item.kind !== 'image'; })
+      .map(function (item) { return 'Файл ' + item.name + ':\n' + item.text; });
+    if (parts.length) fullText = parts.join('\n\n') + (text ? '\n\n' + text : '');
     ATTACH.length = 0;
     renderAttach();
   }
@@ -351,11 +454,15 @@ async function send() {
     const div = document.createElement('div');
     div.className = 'tool';
     div.textContent = line;
-    box.appendChild(div);
+    box.insertBefore(div, bubble);
     scrollDown();
   }
 
   function handle(event) {
+    if (event.type === 'note') {
+      chip(event.text || '');
+      return;
+    }
     if (event.type === 'plan_start' || event.type === 'summary_start') {
       answer = '';
       thinking = '';
@@ -412,7 +519,7 @@ async function send() {
     const resp = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: HISTORY, mode: currentMode() })
+      body: JSON.stringify({ messages: HISTORY, mode: currentMode(), images: images })
     });
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
@@ -1274,6 +1381,12 @@ function renderStatusBar() {
   set('sbSpeed', '<b>' + (act.speed_out || 0) + '</b> ток/с');
   set('sbNow', act.tool ? ('инструмент: <b>' + esc(act.tool) + '</b>') : ('<b>' + esc(act.phase || 'ожидание') + '</b>'));
   set('sbPort', 'порт ' + (engine.port || '—'));
+  const visionInfo = stats.vision || {};
+  if (visionInfo.running) {
+    set('sbVision', 'зрение: <b>' + esc(String(visionInfo.model || '').replace(/\.gguf$/, '')) + '</b>' + (visionInfo.memory_mb ? ' · ' + visionInfo.memory_mb + ' МБ' : ''));
+  } else {
+    set('sbVision', '');
+  }
 }
 
 
@@ -2591,6 +2704,7 @@ bootStep('skins', wireSkins);
 bootStep('density', wireDensity);
 bootStep('drawerHeight', wireDrawerHeight);
 bootStep('rolesBlock', wireRolesBlock);
+bootStep('vision', wireVision);
 bootStep('layout', wireLayout);
 bootStep('drop', wireDrop);
 bootStep('embeddings', wireEmbeddings);
