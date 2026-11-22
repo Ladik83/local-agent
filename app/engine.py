@@ -409,6 +409,7 @@ def start_embed(model_path: str) -> dict:
     if not exe:
         return {"ok": False, "error": "движок llama.cpp не установлен"}
     embed_stop()
+    embed_cleanup()  # и сервер от прошлого запуска приложения
     port = free_port(8190)
     log_path = config.LOGS_DIR / "llama-embed.log"
     cmd = [exe, "-m", path, "--host", "127.0.0.1", "--port", str(port),
