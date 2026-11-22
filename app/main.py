@@ -161,6 +161,7 @@ def state() -> dict:
         "mcp": {"servers": cfg.get("mcp") or []},
         "chats": chats.list_all(),
         "engine": engine.status(),
+        "engine_check": dict(engine.STARTUP),
         "models": local,
         "pick": pick,
         "catalog": [dict(c, url=catalog.url(c)) for c in catalog.CATALOG],
@@ -809,6 +810,8 @@ class Handler(BaseHTTPRequestHandler):
                 if not DISC.get("active"):
                     threading.Thread(target=_discover, daemon=True).start()
                 self._send({"ok": True})
+            elif route == "/api/engine/check":
+                self._send(engine.check_latest(force=True))
             elif route == "/api/engine/install":
                 variant = data.get("variant") or "cpu"
                 found = engine.builds()
@@ -930,6 +933,9 @@ def run(port: int = 7867, open_browser: bool = True):
         vision.cleanup()
     except Exception as exc:
         diag.warn("main.py:vision_cleanup", exc)
+    if config.load().get("auto_update_engine"):
+        import threading
+        threading.Thread(target=lambda: engine.check_latest(force=True), daemon=True).start()
     url = "http://" + HOST + ":%d/" % port
     if _alive(port):
         print("Приложение уже запущено: " + url, flush=True)

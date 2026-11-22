@@ -159,6 +159,25 @@ function renderCatalog() {
   }).join('');
 }
 
+async function checkEngineUpdate() {
+  toast('Смотрю последнюю сборку llama.cpp…');
+  try {
+    const data = await postJson('/api/engine/check', {});
+    if (!data.ok) {
+      toast(data.error || 'Не удалось проверить обновления');
+      return;
+    }
+    if (data.update_available) {
+      toast('Доступно обновление: ' + data.latest + ' (у вас ' + (data.tag || 'неизвестно') + ')');
+    } else {
+      toast('У вас последняя сборка ' + (data.latest || data.tag || ''));
+    }
+    await loadState();
+  } catch (error) {
+    toast('Ошибка проверки: ' + error.message);
+  }
+}
+
 function renderSettings() {
   const s = STATE.settings;
   document.getElementById('allowWrite').checked = !!s.allow_write;
@@ -177,7 +196,21 @@ function renderSettings() {
     '</span><span>' +
     (e.installed ? badge('готов', 'ok') : badge('не установлен', 'no')) + '</span></div>';
   html += '<div class="row"><span>Версия</span><span>' + esc(e.tag || (e.exe ? 'внешняя сборка' : '—')) + '</span></div>';
-  html += '<div class="row"><span>Последняя доступная</span><span>' + esc(e.latest || '—') + '</span></div>';
+  const check = (STATE || {}).engine_check || {};
+  const latest = e.latest || check.latest || '';
+  html += '<div class="row"><span>Последняя доступная</span><span>' + esc(latest || '—') +
+    (check.checked ? ' <span class="sub">проверено ' + new Date(check.checked * 1000).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'}) + '</span>' : '') +
+    '</span></div>';
+  if (e.update_available || (e.tag && latest && e.tag !== latest)) {
+    html += '<div class="row"><span>Обновление движка</span><span>' + badge('доступно ' + esc(latest), 'warn') + ' ' +
+      '<button class="ghost" id="engineUpdate">Обновить</button></span></div>';
+  }
+  html += '<div class="row"><span>Проверить обновление' +
+    tip('Сверяет установленную сборку llama.cpp с последней на GitHub. Проверка идёт через интернет и занимает пару секунд.') +
+    '</span><span><button class="ghost" id="engineCheck">Проверить сейчас</button></span></div>';
+  html += '<div class="row"><span>Проверять при запуске' +
+    tip('Раз в сутки при старте приложения сверять версию движка с GitHub и показывать, если вышла новая сборка.') +
+    '</span><input type="checkbox" id="autoUpdateEngine"></div>';
   if (e.job && e.job.active) {
     html += '<div class="progress"><i style="width:' + (e.job.pct || 0) + '%"></i></div><div class="sub">' + esc(e.job.text) + '</div>';
   }
@@ -186,6 +219,18 @@ function renderSettings() {
     '<button class="ghost" onclick="installEngine(\'cpu\')">CPU</button></span></div>';
   html += '<div class="sub">' + (e.exe ? 'Файл: ' + esc(e.exe) : 'llama.cpp будет скачан в папку приложения') + '</div>';
   document.getElementById('enginePanel').innerHTML = html;
+  const checkBtn = document.getElementById('engineCheck');
+  if (checkBtn) checkBtn.addEventListener('click', checkEngineUpdate);
+  const updateBtn = document.getElementById('engineUpdate');
+  if (updateBtn) updateBtn.addEventListener('click', function () { installEngine(e.variant || 'vulkan'); });
+  const autoBox = document.getElementById('autoUpdateEngine');
+  if (autoBox) {
+    autoBox.checked = !!s.auto_update_engine;
+    autoBox.addEventListener('change', async function () {
+      await postJson('/api/settings', { auto_update_engine: autoBox.checked });
+      toast(autoBox.checked ? 'Буду проверять обновления движка при запуске' : 'Авто-проверка выключена');
+    });
+  }
   renderVisionSettings();
 }
 

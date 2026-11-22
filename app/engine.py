@@ -164,6 +164,24 @@ def find_exe():
     return None
 
 
+STARTUP = {"tag": "", "latest": "", "checked": 0.0, "error": ""}
+
+
+def check_latest(force: bool = True) -> dict:
+    """Сверить установленный движок с последней сборкой на GitHub."""
+    cfg = config.load()
+    installed = cfg.get("engine_tag") or ""
+    try:
+        found = builds(force=force)
+    except Exception as exc:
+        STARTUP.update({"tag": installed, "error": str(exc), "checked": time.time()})
+        return {"ok": False, "error": "не удалось проверить обновления: %s" % exc, "tag": installed}
+    latest = found[0]["tag"] if found else ""
+    STARTUP.update({"tag": installed, "latest": latest, "error": "", "checked": time.time()})
+    return {"ok": True, "tag": installed, "latest": latest,
+            "update_available": bool(installed and latest and installed != latest)}
+
+
 def status() -> dict:
     cfg = config.load()
     exe = find_exe()
