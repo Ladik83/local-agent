@@ -48,6 +48,13 @@ check("длинное значение переносится", "flex-wrap: wrap
 check("полоска не сжимается", ".meter { flex: none;" in css)
 check("панели не сжимаются во флексе", "flex: none" in css.split(".drawer {")[1].split("}")[0])
 
+check("блок ролей: шестерёнка", 'id="rolesSettings"' in html)
+check("блок ролей: список", 'id="rolesToggle"' in html and 'id="rolesMenu"' in html)
+check("нет перехода по клику на блок", 'data-tab=&quot;agents&quot;]' not in html)
+check("слой подсказок", 'id="tipLayer"' in html and ".tipLayer" in css)
+check("подсказки ролей в коде", "function wireRolesBlock()" in app and "showRoleTip" in app)
+check("список ролей рисуется", "function renderRolesMenu()" in app)
+
 for name in ("app.js", "panels.js"):
     res = subprocess.run(["node", "--check", str(UI / name)], capture_output=True, text=True)
     check("node --check " + name, res.returncode == 0, res.stderr.strip()[:120])

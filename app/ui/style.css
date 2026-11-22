@@ -649,3 +649,37 @@ body.hugeFont { --fs: 19px; }
 .statusbar > * { flex: none; }
 .statusbar .sbRight { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 900px) { .statusbar { flex-wrap: wrap; } }
+
+/* ---------- блок «Роли»: список с описаниями ---------- */
+.kIconBtn {
+  margin-left: auto; background: transparent; border: 0; color: var(--muted);
+  cursor: pointer; font-size: 13px; padding: 0 2px; line-height: 1;
+}
+.kIconBtn:hover { color: var(--accent); }
+.kIconBtn + .kCollapse { margin-left: 4px; }
+.rolesToggle { width: 100%; justify-content: space-between; margin-top: 6px; }
+.rolesToggle .caret { transition: transform .15s ease; }
+.rolesToggle.open .caret { transform: rotate(180deg); }
+.rolesMenu {
+  margin-top: 6px; display: flex; flex-direction: column; gap: 2px;
+  max-height: 280px; overflow-y: auto;
+}
+.roleItem { padding: 5px 6px; border-radius: 7px; cursor: help; border: 1px solid transparent; }
+.roleItem:hover, .roleItem:focus-visible { background: rgba(127, 127, 127, .12); border-color: var(--line); outline: none; }
+.roleItem[data-pinned="1"] { background: rgba(127, 127, 127, .12); border-color: var(--accent); }
+.roleItemTop { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 12.5px; }
+.roleItemDesc { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roleThink {
+  flex: none; font-size: 10.5px; color: var(--accent);
+  border: 1px solid var(--bubble-line); border-radius: 999px; padding: 0 6px;
+}
+.tipLayer {
+  position: fixed; z-index: 200; width: 290px; max-width: 46vw;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 10px; padding: 9px 11px; box-shadow: 0 10px 30px rgba(0, 0, 0, .28);
+  font-size: 12px; line-height: 1.45; pointer-events: none;
+}
+.tipTitle { font-weight: 600; margin-bottom: 4px; }
+.tipRow { color: var(--muted); }
+.tipText { margin-top: 5px; }
+.tipHint { margin-top: 6px; color: var(--muted); font-size: 11px; }

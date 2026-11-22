@@ -801,6 +801,145 @@ function bar(percent, cls) {
   return '<div class="meter"><i class="' + (cls || '') + '" style="width:' + value + '%"></i></div>';
 }
 
+const ROLES_LABELS = {"list": "Список ролей", "gear_title": "Настройки ролей — откроется вкладка «Команда»", "toggle_title": "Показать список ролей", "think": "Думает", "tools": "Инструменты", "tools_all": "все", "tip_hint": "Нажмите, чтобы закрепить описание", "no_roles": "Роли не загружены"};
+
+function roleShort(text, limit) {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  if (clean.length <= limit) return clean;
+  return clean.slice(0, limit - 1).replace(/[,;:.\s]\S*$/, '') + '…';
+}
+
+function roleToolsText(role) {
+  if (role.tools === 'all') return ROLES_LABELS.tools_all;
+  return Array.isArray(role.tools) ? role.tools.join(', ') : '';
+}
+
+function findRole(id) {
+  return (((STATE.team || {}).roles) || []).find(function (role) { return role.id === id; }) || null;
+}
+
+function renderRolesMenu() {
+  const menu = document.getElementById('rolesMenu');
+  if (!menu) return;
+  const roles = ((STATE.team || {}).roles) || [];
+  if (!roles.length) {
+    menu.innerHTML = '<div class="sub">' + ROLES_LABELS.no_roles + '</div>';
+    return;
+  }
+  menu.innerHTML = roles.map(function (role) {
+    return '<div class="roleItem" data-role-id="' + esc(role.id) + '" tabindex="0">' +
+      '<div class="roleItemTop"><b>' + esc(role.title) + '</b>' +
+      '<span class="roleThink">' + esc(role.thinking || '—') + '</span></div>' +
+      '<div class="roleItemDesc">' + esc(roleShort(role.prompt, 64)) + '</div></div>';
+  }).join('');
+}
+
+function roleTipHtml(role, full) {
+  const tools = roleToolsText(role);
+  let html = '<div class="tipTitle">' + esc(role.title) + '</div>' +
+    '<div class="tipRow">' + ROLES_LABELS.think + ': ' + esc(role.thinking || '—') + '</div>';
+  if (tools) html += '<div class="tipRow">' + ROLES_LABELS.tools + ': ' + esc(tools) + '</div>';
+  html += '<div class="tipText">' + esc(full ? String(role.prompt || '') : roleShort(role.prompt, 260)) + '</div>';
+  if (!full) html += '<div class="tipHint">' + ROLES_LABELS.tip_hint + '</div>';
+  return html;
+}
+
+function showRoleTip(html, anchor) {
+  const layer = document.getElementById('tipLayer');
+  if (!layer || !anchor) return;
+  layer.innerHTML = html;
+  layer.hidden = false;
+  const rect = anchor.getBoundingClientRect();
+  const gap = 8;
+  let left = rect.right + gap;
+  let top = rect.top;
+  if (left + layer.offsetWidth > window.innerWidth - 8) left = Math.max(8, rect.left - layer.offsetWidth - gap);
+  if (top + layer.offsetHeight > window.innerHeight - 8) top = Math.max(8, window.innerHeight - layer.offsetHeight - 8);
+  layer.style.left = Math.round(left) + 'px';
+  layer.style.top = Math.round(top) + 'px';
+}
+
+function hideRoleTip() {
+  const layer = document.getElementById('tipLayer');
+  if (layer) layer.hidden = true;
+  document.querySelectorAll('.roleItem[data-pinned="1"]').forEach(function (item) {
+    delete item.dataset.pinned;
+  });
+}
+
+function wireRolesBlock() {
+  const toggle = document.getElementById('rolesToggle');
+  const menu = document.getElementById('rolesMenu');
+  const gear = document.getElementById('rolesSettings');
+
+  if (gear) {
+    gear.addEventListener('click', function (event) {
+      event.stopPropagation();
+      const tab = document.querySelector('.tab[data-tab="agents"]');
+      if (tab) tab.click();
+    });
+  }
+  if (!toggle || !menu) return;
+
+  toggle.addEventListener('click', function () {
+    const willOpen = menu.hasAttribute('hidden');
+    if (willOpen) {
+      renderRolesMenu();
+      menu.removeAttribute('hidden');
+    } else {
+      menu.setAttribute('hidden', '');
+      hideRoleTip();
+    }
+    toggle.classList.toggle('open', willOpen);
+    toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+  });
+
+  menu.addEventListener('mouseover', function (event) {
+    const item = event.target.closest ? event.target.closest('.roleItem') : null;
+    if (!item || (event.relatedTarget && item.contains(event.relatedTarget))) return;
+    const role = findRole(item.dataset.roleId);
+    if (role && item.dataset.pinned !== '1') showRoleTip(roleTipHtml(role, false), item);
+  });
+  menu.addEventListener('mouseout', function (event) {
+    const item = event.target.closest ? event.target.closest('.roleItem') : null;
+    if (!item || (event.relatedTarget && item.contains(event.relatedTarget))) return;
+    if (item.dataset.pinned === '1') return;
+    const layer = document.getElementById('tipLayer');
+    if (layer) layer.hidden = true;
+  });
+  menu.addEventListener('focusin', function (event) {
+    const item = event.target.closest ? event.target.closest('.roleItem') : null;
+    if (!item) return;
+    const role = findRole(item.dataset.roleId);
+    if (role) showRoleTip(roleTipHtml(role, false), item);
+  });
+  menu.addEventListener('focusout', function () {
+    const layer = document.getElementById('tipLayer');
+    if (layer) layer.hidden = true;
+  });
+  menu.addEventListener('click', function (event) {
+    const item = event.target.closest ? event.target.closest('.roleItem') : null;
+    if (!item) return;
+    const role = findRole(item.dataset.roleId);
+    if (!role) return;
+    const wasPinned = item.dataset.pinned === '1';
+    document.querySelectorAll('.roleItem[data-pinned="1"]').forEach(function (node) { delete node.dataset.pinned; });
+    if (wasPinned) {
+      hideRoleTip();
+    } else {
+      item.dataset.pinned = '1';
+      showRoleTip(roleTipHtml(role, true), item);
+    }
+  });
+
+  document.addEventListener('click', function (event) {
+    if (!event.target.closest || !event.target.closest('#rolesMenu')) hideRoleTip();
+  });
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') hideRoleTip();
+  });
+}
+
 function renderStats() {
   if (!STATS) return;
   const act = STATS.activity || {};
@@ -1351,6 +1490,10 @@ function render() {
   if (rolesHint) {
     const count = ((STATE.team || {}).roles || []).length;
     rolesHint.textContent = count ? (count + ' ролей, режим ' + (STATE.team.enabled ? 'включён' : 'выключен')) : '';
+  }
+  renderRolesMenu();
+  if (document.getElementById('rolesMenu') && !document.getElementById('rolesMenu').hasAttribute('hidden')) {
+    document.getElementById('rolesMenu').removeAttribute('hidden');
   }
   renderLocalModels();
   renderCatalog();
@@ -2447,6 +2590,7 @@ bootStep('modelPicker', wireModelPicker);
 bootStep('skins', wireSkins);
 bootStep('density', wireDensity);
 bootStep('drawerHeight', wireDrawerHeight);
+bootStep('rolesBlock', wireRolesBlock);
 bootStep('layout', wireLayout);
 bootStep('drop', wireDrop);
 bootStep('embeddings', wireEmbeddings);

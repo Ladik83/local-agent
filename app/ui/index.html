@@ -40,8 +40,12 @@
       <div class="kblockBody"><div id="projectsList"></div><div class="accAdd"><input id="projPath" type="text" placeholder="C:\путь\к\папке"><button class="ghost tiny" onclick="addProject()">+</button></div></div>
      </div>
      <div class="kblock" data-block="roles">
-      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Роли</b><button class="kCollapse" title="Свернуть блок">▾</button></div>
-      <div class="kblockBody"><div class="sub" id="kRolesHint"></div><button class="ghost tiny" onclick="document.querySelector('.tab[data-tab=&quot;agents&quot;]').click()">Открыть таблицу ролей</button></div>
+      <div class="kblockHead" draggable="true"><span class="kGrip" title="Перетащите блок">⠿</span><b>Роли</b><button class="kIconBtn" id="rolesSettings" title="Настройки ролей — откроется вкладка «Команда»">⚙</button><button class="kCollapse" title="Свернуть блок">▾</button></div>
+      <div class="kblockBody">
+       <div class="sub" id="kRolesHint"></div>
+       <button class="ghost tiny rolesToggle" id="rolesToggle" aria-expanded="false" title="Показать список ролей">Список ролей <span class="caret">▾</span></button>
+       <div class="rolesMenu" id="rolesMenu" hidden></div>
+      </div>
      </div>
     </div>
    </aside>
@@ -359,5 +363,6 @@
 <div id="toast" class="toast"></div>
 <script src="/ui/panels.js"></script>
 <script src="/ui/app.js"></script>
+<div class="tipLayer" id="tipLayer" hidden></div>
 </body>
 </html>
