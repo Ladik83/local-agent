@@ -760,6 +760,42 @@ async function removeMcp(id) {
 let CURRENT_CHAT = "";
 let STATS = null;
 
+function patchBox(box, html) {
+  if (!box) return;
+  const template = document.createElement('div');
+  template.innerHTML = html;
+  const fresh = Array.prototype.slice.call(template.children);
+  const current = Array.prototype.slice.call(box.children);
+  const shape = function (nodes) {
+    return nodes.map(function (node) {
+      return node.tagName + '.' + node.className + ':' + (node.firstElementChild ? node.firstElementChild.textContent : '');
+    }).join('|');
+  };
+  if (shape(current) !== shape(fresh)) {
+    box.innerHTML = html;
+    return;
+  }
+  fresh.forEach(function (node, index) {
+    const target = current[index];
+    if (!target) return;
+    if (node.classList.contains('meter')) {
+      const fill = node.firstElementChild;
+      const live = target.firstElementChild;
+      if (!fill || !live) return;
+      if (live.className !== fill.className) live.className = fill.className;
+      if (live.style.width !== fill.style.width) live.style.width = fill.style.width;
+      return;
+    }
+    const value = node.querySelector('b');
+    const liveValue = target.querySelector('b');
+    if (value && liveValue && value.textContent !== liveValue.textContent) {
+      liveValue.textContent = value.textContent;
+    }
+  });
+}
+
+window.patchBox = patchBox;
+
 function bar(percent, cls) {
   const value = Math.max(0, Math.min(100, Number(percent) || 0));
   return '<div class="meter"><i class="' + (cls || '') + '" style="width:' + value + '%"></i></div>';
@@ -767,44 +803,15 @@ function bar(percent, cls) {
 
 function renderStats() {
   if (!STATS) return;
-  const mem = STATS.memory || {};
-  const cpu = STATS.cpu || 0;
-  const res = document.getElementById('monRes');
-  if (res) {
-    res.innerHTML =
-      '<div class="metric"><span>Процессор</span><b>' + cpu.toFixed(0) + '%</b></div>' + bar(cpu, cpu > 85 ? 'err' : (cpu > 60 ? 'warn' : '')) +
-      '<div class="metric"><span>Память</span><b>' + mem.used + ' из ' + mem.total + ' ГБ</b></div>' + bar(mem.percent, mem.percent > 88 ? 'err' : (mem.percent > 70 ? 'warn' : '')) +
-      '<div class="metric"><span>Свободно на диске</span><b>' + STATS.disk_free + ' ГБ</b></div>';
-  }
-  const engine = STATS.engine || {};
-  const model = document.getElementById('monModel');
-  if (model) {
-    model.innerHTML =
-      '<div class="metric"><span>Модель</span><b>' + esc(engine.model || 'не загружена') + '</b></div>' +
-      '<div class="metric"><span>Память модели</span><b>' + (engine.rss_mb || 0) + ' МБ</b></div>' +
-      '<div class="metric"><span>Порт</span><b>' + (engine.port || '—') + '</b></div>' +
-      '<div class="metric"><span>Работает</span><b>' + (engine.uptime ? engine.uptime + ' с' : '—') + '</b></div>';
-  }
   const act = STATS.activity || {};
   const tokens = document.getElementById('monTokens');
   if (tokens) {
-    tokens.innerHTML =
+    patchBox(tokens,
       '<div class="metric"><span>Токенов на входе</span><b>' + (act.tokens_in || 0) + '</b></div>' +
       '<div class="metric"><span>Токенов на выходе</span><b>' + (act.tokens_out || 0) + '</b></div>' +
       '<div class="metric"><span>Скорость вывода</span><b>' + (act.speed_out || 0) + ' ток/с</b></div>' +
       '<div class="metric"><span>Обработка входа</span><b>' + (act.speed_in || 0) + ' ток/с</b></div>' +
-      '<div class="metric"><span>Запросов</span><b>' + (act.calls || 0) + '</b></div>';
-  }
-  const now = document.getElementById('monNow');
-  if (now) {
-    let html = '<div class="metric"><span>Состояние</span><b>' + esc(act.phase || 'ожидание') + '</b></div>';
-    if (act.role) {
-      html += '<div class="metric"><span>Роль</span><b>' + esc(act.role) + (act.step ? ' · ' + esc(act.step) : '') + '</b></div>';
-    }
-    if (act.tool) {
-      html += '<div class="metric"><span>Инструмент</span><span class="roleChip">' + esc(act.tool) + '</span></div>';
-    }
-    now.innerHTML = html;
+      '<div class="metric"><span>Запросов</span><b>' + (act.calls || 0) + '</b></div>');
   }
 }
 

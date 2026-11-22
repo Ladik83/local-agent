@@ -260,7 +260,7 @@
       } else {
         html += row('Диск свободно', 'нет данных');
       }
-      box.innerHTML = html;
+      if (window.patchBox) window.patchBox(box, html); else box.innerHTML = html;
     } catch (err) {
       placeholder(box, 'нет данных');
     }
@@ -392,7 +392,7 @@
       html += '<div class="row" style="border:0;padding:8px 0 0">' + (loaded
         ? '<button class="ghost tiny" data-panels-act="unload">Выгрузить</button>'
         : '<button class="ghost tiny" data-panels-act="load">Загрузить рекомендованную</button>') + '</div>';
-      box.innerHTML = html;
+      if (window.patchBox) window.patchBox(box, html); else box.innerHTML = html;
       var loadBtn = box.querySelector('[data-panels-act="load"]');
       if (loadBtn) loadBtn.onclick = function () { loadModel(recommendedPath()); };
       var unloadBtn = box.querySelector('[data-panels-act="unload"]');
@@ -454,7 +454,7 @@
       var html = adviceLine('Быстро', fast, 'до 5,5 ГБ — отвечает резво') +
         adviceLine('Качественно', strong, noteStrong) +
         '<div class="sub">свободно ' + esc(gbText(free)) + '</div>';
-      box.innerHTML = html;
+      if (window.patchBox) window.patchBox(box, html); else box.innerHTML = html;
       bindAdvice(box);
     } catch (err) {
       placeholder(box, 'нет данных');
@@ -533,7 +533,7 @@
       html += '</select></div>';
       html += '<div class="tuneRow"><span>Своё значение</span><input type="number" id="panelsCtxManual" min="512" max="262144" step="512" value="' + context + '"></div>';
       html += '<div class="tuneRow"><span></span><button class="ghost tiny" id="panelsCtxApply">Применить</button></div>';
-      box.innerHTML = html;
+      if (window.patchBox) window.patchBox(box, html); else box.innerHTML = html;
       var tempSelect = byId('panelsTemp');
       var ctxSelect = byId('panelsCtx');
       var manualCtx = byId('panelsCtxManual');
@@ -656,7 +656,7 @@
         ? '<span id="panelsNowSecs">' + seconds + ' с</span>'
         : '—';
       html += rowHtml('Идёт', duration);
-      box.innerHTML = html;
+      if (window.patchBox) window.patchBox(box, html); else box.innerHTML = html;
       if (busy && seconds !== null) startTick(seconds);
       else stopTick();
     } catch (err) {

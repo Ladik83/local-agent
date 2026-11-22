@@ -345,9 +345,14 @@ button.wide { width: 100%; text-align: center; margin-bottom: 4px; }
 .chatItem .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chatItem .x { color: var(--muted); padding: 0 4px; }
 .chatItem .x:hover { color: var(--err); }
-.metric { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); padding: 2px 0; }
+.metric {
+  display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0 8px;
+  font-size: 12.5px; color: var(--muted); padding: 2px 0; min-height: 21px;
+}
+.metric span { flex: 0 1 auto; white-space: nowrap; }
+.metric b { flex: 0 1 auto; min-width: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .metric b { color: var(--text); font-weight: 600; }
-.meter { height: 6px; background: var(--track); border-radius: 99px; overflow: hidden; margin: 4px 0 10px; }
+.meter { flex: none; height: 6px; background: var(--track); border-radius: 99px; overflow: hidden; margin: 4px 0 10px; }
 .meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s ease; }
 .meter i.warn { background: var(--warn); }
 .meter i.err { background: var(--err); }
@@ -636,3 +641,11 @@ body.hugeFont { --fs: 19px; }
   .railLeft.open { transform: none; }
   .railResizer[data-resize="left"] { display: none; }
 }
+
+/* ---------- стабильные размеры: мониторы не должны дёргаться ---------- */
+.rail, .railBody, .drawerCol { scrollbar-gutter: stable; }
+.railBody > .kblock, .drawerCol > .kblock { width: 100%; }
+.statusbar { flex-wrap: nowrap; overflow: hidden; font-variant-numeric: tabular-nums; }
+.statusbar > * { flex: none; }
+.statusbar .sbRight { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 900px) { .statusbar { flex-wrap: wrap; } }
