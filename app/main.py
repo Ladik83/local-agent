@@ -39,13 +39,80 @@ ACCESS_TOKEN = _load_token()
 
 HOST = "127.0.0.1"
 MCP_CATALOG = [
-    {"id": "filesystem", "title": "Файлы — официальный сервер", "command": "npx",
+    {"id": "filesystem", "title": "Файлы", "command": "npx", "needs": "node", "category": "Файлы",
+     "about": "Чтение, запись и поиск файлов в выбранной папке. Даёт агенту доступ к документам и коду.",
      "args": ["-y", "@modelcontextprotocol/server-filesystem", "%HOME%"]},
-    {"id": "memory", "title": "Память — официальный сервер", "command": "npx",
+    {"id": "memory", "title": "Память (граф знаний)", "command": "npx", "needs": "node", "category": "Память",
+     "about": "Хранит сущности и связи между ними: люди, проекты, решения. Агент может записывать и вспоминать.",
      "args": ["-y", "@modelcontextprotocol/server-memory"]},
-    {"id": "fetch", "title": "Загрузка страниц — python-сервер", "command": "uvx",
+    {"id": "sequential-thinking", "title": "Пошаговые рассуждения", "command": "npx", "needs": "node", "category": "Мышление",
+     "about": "Помогает разбивать сложную задачу на шаги и проверять себя по ходу решения.",
+     "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]},
+    {"id": "fetch", "title": "Загрузка веб-страниц", "command": "uvx", "needs": "python", "category": "Сеть",
+     "about": "Скачивает страницу и переводит её в читаемый текст: статьи, документация, справки.",
      "args": ["mcp-server-fetch"]},
+    {"id": "git", "title": "Git", "command": "uvx", "needs": "python", "category": "Разработка",
+     "about": "История, диффы, ветки и коммиты в репозитории без ручных команд в терминале.",
+     "args": ["mcp-server-git", "--repository", "%CWD%"]},
+    {"id": "sqlite", "title": "SQLite", "command": "uvx", "needs": "python", "category": "Данные",
+     "about": "SQL-запросы к локальной базе: таблицы, выборки, отчёты.",
+     "args": ["mcp-server-sqlite", "--db-path", "%DATA%\\mcp.sqlite"]},
+    {"id": "time", "title": "Время и часовые пояса", "command": "uvx", "needs": "python", "category": "Утилиты",
+     "about": "Текущее время в любом городе и перевод между часовыми поясами.",
+     "args": ["mcp-server-time"]},
+    {"id": "everything", "title": "Проверочный сервер", "command": "npx", "needs": "node", "category": "Утилиты",
+     "about": "Маленький демонстрационный сервер: удобно проверить, что MCP вообще работает.",
+     "args": ["-y", "@modelcontextprotocol/server-everything"]},
+    {"id": "github", "title": "GitHub", "command": "npx", "needs": "node", "key": "GITHUB_TOKEN", "category": "Разработка",
+     "about": "Issues, pull request'ы, файлы и поиск по репозиториям GitHub. Нужен токен.",
+     "args": ["-y", "@modelcontextprotocol/server-github"]},
+    {"id": "brave-search", "title": "Веб-поиск Brave", "command": "npx", "needs": "node", "key": "BRAVE_API_KEY", "category": "Сеть",
+     "about": "Поиск в интернете через Brave Search — свежие новости и ссылки. Нужен ключ API.",
+     "args": ["-y", "@modelcontextprotocol/server-brave-search"]},
+    {"id": "puppeteer", "title": "Браузер (Puppeteer)", "command": "npx", "needs": "node", "category": "Сеть",
+     "about": "Открывает сайты в настоящем браузере, кликает и снимает скриншоты.",
+     "args": ["-y", "@modelcontextprotocol/server-puppeteer"]},
+    {"id": "postgres", "title": "PostgreSQL", "command": "npx", "needs": "node", "key": "DATABASE_URL", "category": "Данные",
+     "about": "Запросы к PostgreSQL: схемы, выборки, отчёты. Нужна строка подключения.",
+     "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://user:pass@localhost/db"]},
+    {"id": "docker", "title": "Docker", "command": "uvx", "needs": "python", "category": "Разработка",
+     "about": "Список контейнеров, логи, запуск и остановка — без ручных команд.",
+     "args": ["mcp-server-docker"]},
 ]
+def _expand_args(args) -> list:
+    """Подставить домашнюю папку и папку данных в аргументы MCP-сервера."""
+    home = str(pathlib.Path.home())
+    data = str(config.DATA_DIR)
+    here = str(pathlib.Path.cwd())
+    out = []
+    for item in args or []:
+        out.append(str(item).replace("%HOME%", home).replace("%DATA%", data).replace("%CWD%", here))
+    return out
+
+
+def _toolchains() -> dict:
+    import shutil
+    return {"node": bool(shutil.which("npx")), "python": bool(shutil.which("uvx"))}
+
+
+def _mcp_state() -> list:
+    """Серверы из настроек + их состояние: сколько инструментов, ошибка."""
+    cfg = config.load()
+    servers = cfg.get("mcp") or []
+    result = []
+    for server in servers:
+        info = {"id": server.get("id"), "command": server.get("command"),
+                "args": _expand_args(server.get("args")), "enabled": server.get("enabled", True),
+                "tools": [], "error": ""}
+        try:
+            ready = mcp.session(server["id"], server.get("command", ""), _expand_args(server.get("args")))
+            info["tools"] = [tool["raw"] for tool in ready.tools]
+            info["error"] = ready.error
+        except Exception as exc:
+            info["error"] = str(exc)
+        result.append(info)
+    return result
+
 DL = {"active": False, "name": "", "pct": 0.0, "text": "", "error": None, "done": None}
 DL_LOCK = threading.Lock()
 _SCAN_CACHE = {"ts": 0.0, "value": []}
@@ -309,12 +376,27 @@ class Handler(BaseHTTPRequestHandler):
             elif route == "/api/state":
                 self._send(state())
             elif route == "/api/mcp":
-                servers = config.load().get("mcp") or []
-                try:
-                    found = [item["function"]["name"] for item in mcp.tools_for(servers)]
-                except Exception as exc:
-                    found = ["ошибка: " + str(exc)]
-                self._send({"servers": servers, "tools": found, "catalog": MCP_CATALOG})
+                cfg = config.load()
+                installed = {str(item.get("id")) for item in (cfg.get("mcp") or [])}
+                catalog = []
+                for entry in MCP_CATALOG:
+                    item = dict(entry)
+                    item["installed"] = entry["id"] in installed
+                    catalog.append(item)
+                self._send({"servers": _mcp_state(), "catalog": catalog,
+                            "toolchains": _toolchains(), "auto": bool(cfg.get("tools_auto"))})
+            elif route == "/api/tools":
+                cfg = config.load()
+                catalog = []
+                for entry in MCP_CATALOG:
+                    item = dict(entry)
+                    item["installed"] = any(str(s.get("id")) == entry["id"] for s in (cfg.get("mcp") or []))
+                    catalog.append(item)
+                self._send({"ok": True, "builtin": tools.catalog(), "off": cfg.get("tools_off") or [],
+                            "auto": bool(cfg.get("tools_auto")),
+                            "allowed": sorted(tools._allowed(cfg)),
+                            "mcp_catalog": catalog, "servers": _mcp_state(),
+                            "toolchains": _toolchains()})
             elif route == "/api/voice":
                 self._send(voice.status())
             elif route == "/api/hf/search":
@@ -514,6 +596,22 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({"ok": True})
             elif route == "/api/model/download":
                 self._send(start_download(data.get("id", "")))
+            elif route == "/api/tools/toggle":
+                name = str(data.get("name") or "").strip()
+                if not name:
+                    self._send({"ok": False, "error": "не указан инструмент"})
+                else:
+                    off = [str(item) for item in (config.load().get("tools_off") or []) if str(item) != name]
+                    if not data.get("on"):
+                        off.append(name)
+                    config.save({"tools_off": off})
+                    self._send({"ok": True, "off": off})
+            elif route == "/api/tools/auto":
+                config.save({"tools_auto": bool(data.get("on"))})
+                self._send({"ok": True, "auto": bool(data.get("on"))})
+            elif route == "/api/tools/pick":
+                task = str(data.get("task") or "")
+                self._send({"ok": True, "picked": tools.select(task, config.load())})
             elif route == "/api/vision/start":
                 awaited = vision.start(str(data.get("path") or ""))
                 self._send(awaited)
@@ -667,13 +765,11 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception as exc:
                     self._send({"ok": False, "error": str(exc)})
             elif route == "/api/mcp/add":
-                if not tools.approval_gate("mcp", {"server": str(data.get("id") or "")}, config.load(), emit_console):
-                    self._send({"ok": False, "error": "Пользователь не разрешил запуск MCP-сервера"})
-                    return
-            elif route == "/api/mcp/add":
+                known = next((c for c in MCP_CATALOG if c["id"] == str(data.get("id") or "")), {})
                 entry = {"id": str(data.get("id") or "").strip(),
+                         "title": known.get("title") or str(data.get("title") or ""),
                          "command": str(data.get("command") or "").strip(),
-                         "args": [str(a) for a in (data.get("args") or [])], "enabled": True}
+                         "args": _expand_args(data.get("args") or []), "enabled": True}
                 if not entry["id"] or not entry["command"]:
                     self._send({"ok": False, "error": "нужны id и команда"})
                 else:
@@ -686,10 +782,6 @@ class Handler(BaseHTTPRequestHandler):
                 config.save({"mcp": servers})
                 mcp.stop_all()
                 self._send({"ok": True, "servers": servers})
-            elif route == "/api/mcp/test":
-                if not tools.approval_gate("mcp", {"server": str(data.get("id") or "")}, config.load(), emit_console):
-                    self._send({"ok": False, "error": "Пользователь не разрешил проверку MCP-сервера"})
-                    return
             elif route == "/api/mcp/test":
                 sid = str(data.get("id") or "")
                 servers = [s for s in (config.load().get("mcp") or []) if s.get("id") == sid]

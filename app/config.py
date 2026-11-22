@@ -108,6 +108,8 @@ DEFAULTS: dict = {
     "vision_model": "",            # путь к VL-модели; пусто — самая лёгкая с mmproj
     "vision_context": 0,           # 0 — взять min(context, 8192)
     "vision_enabled": True,        # картинки разбирает модель зрения
+    "tools_auto": False,           # подбирать инструменты под задачу
+    "tools_off": [],               # выключенные вручную инструменты
     "update_pubkey": "",          # открытый ключ ECDSA P-256 для подписи манифеста
     "telegram_chat": "",          # куда бот пишет отчёты
     "context": 8192,             # размер контекста

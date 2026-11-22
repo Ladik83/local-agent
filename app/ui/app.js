@@ -824,6 +824,120 @@ function renderMcp() {
   box.innerHTML = html;
 }
 
+let TOOLS_INFO = { builtin: [], mcp_catalog: [], servers: [], off: [], allowed: [], auto: false };
+
+async function loadTools() {
+  try {
+    TOOLS_INFO = await (await fetch('/api/tools')).json();
+  } catch (error) {
+    TOOLS_INFO = TOOLS_INFO || {};
+  }
+  return TOOLS_INFO;
+}
+
+function renderTools() {
+  const info = TOOLS_INFO || {};
+  const auto = document.getElementById('toolsAuto');
+  if (auto) auto.checked = !!info.auto;
+  const autoHint = document.getElementById('toolsAutoHint');
+  if (autoHint) {
+    autoHint.textContent = info.auto
+      ? 'Включено: агент сам выбирает инструменты под задачу и пишет набор в чат.'
+      : 'Выключено: агенту доступны все разрешённые инструменты.';
+  }
+  const box = document.getElementById('toolsBuiltin');
+  if (box) {
+    const off = info.off || [];
+    const allowed = info.allowed || [];
+    box.innerHTML = (info.builtin || []).map(function (item) {
+      const enabled = off.indexOf(item.name) < 0;
+      const perm = allowed.indexOf(item.name) >= 0;
+      const danger = item.danger && item.danger !== 'чтение' ? '<span class="badgeDanger">' + esc(item.danger) + '</span>' : '';
+      return '<div class="row toolRow"><span><b>' + esc(item.title) + '</b>' + danger +
+        '<span class="sub">' + esc(item.about) + '</span></span><span><input type="checkbox" data-tool="' + item.name + '"' +
+        (enabled ? ' checked' : '') + (perm ? '' : ' disabled title="Сначала разрешите в настройках"') + '></span></div>';
+    }).join('');
+    box.querySelectorAll('input[data-tool]').forEach(function (input) {
+      input.addEventListener('change', function () { toggleTool(input.dataset.tool, input.checked); });
+    });
+  }
+  const env = document.getElementById('mcpEnv');
+  if (env) {
+    const tc = info.toolchains || {};
+    env.textContent = 'Что установлено: Node.js/npx — ' + (tc.node ? 'есть' : 'нет') +
+      ', Python/uvx — ' + (tc.python ? 'есть' : 'нет') + '.';
+  }
+  const catalog = document.getElementById('mcpCatalog');
+  if (catalog) {
+    catalog.innerHTML = (info.mcp_catalog || []).map(function (item) {
+      const need = item.needs === 'python' ? 'Python и uv' : 'Node.js';
+      return '<div class="mcpCard"><div><b>' + esc(item.title) + '</b>' +
+        '<span class="sub">' + esc(item.about) + '</span>' +
+        '<span class="sub">' + esc(item.category || '') + ' · ' + esc(item.command) + ' · нужен ' + need +
+        (item.key ? ' · ключ ' + esc(item.key) : '') + '</span></div>' +
+        '<button class="' + (item.installed ? 'ghost' : 'primary') + ' tiny" data-mcp="' + item.id +
+        '" data-action="' + (item.installed ? 'remove' : 'add') + '">' +
+        (item.installed ? 'Отключить' : 'Подключить') + '</button></div>';
+    }).join('');
+    catalog.querySelectorAll('button[data-mcp]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        if (button.dataset.action === 'add') addMcpCatalog(button.dataset.mcp);
+        else removeMcp(button.dataset.mcp);
+      });
+    });
+  }
+  const servers = document.getElementById('mcpServers');
+  if (servers) {
+    const list = info.servers || [];
+    if (!list.length) {
+      servers.innerHTML = '<div class="sub">Пока ничего не подключено — возьмите сервер из каталога выше.</div>';
+    } else {
+      servers.innerHTML = list.map(function (server) {
+        const chips = (server.tools || []).map(function (name) {
+          return '<span class="mcpTool">' + esc(name) + '</span>';
+        }).join('');
+        return '<div class="mcpCard"><div><b>' + esc(server.id) + '</b>' +
+          '<span class="sub">' + esc([server.command].concat(server.args || []).join(' ')) + '</span>' +
+          (server.error ? '<span class="sub">Ошибка: ' + esc(server.error) + '</span>' : '') +
+          (chips ? '<div class="mcpTools">' + chips + '</div>'
+                 : '<span class="sub">Инструменты не загружены — нажмите «Проверить»</span>') +
+          '</div><span><button class="ghost tiny" data-test="' + server.id + '">Проверить</button> ' +
+          '<button class="ghost tiny" data-remove="' + server.id + '">Удалить</button></span></div>';
+      }).join('');
+      servers.querySelectorAll('button[data-test]').forEach(function (button) {
+        button.addEventListener('click', function () { testMcp(button.dataset.test); });
+      });
+      servers.querySelectorAll('button[data-remove]').forEach(function (button) {
+        button.addEventListener('click', function () { removeMcp(button.dataset.remove); });
+      });
+    }
+  }
+}
+
+async function refreshTools() {
+  await loadTools();
+  renderTools();
+}
+
+async function toggleTool(name, on) {
+  await postJson('/api/tools/toggle', { name: name, on: on });
+  toast((on ? 'Включено: ' : 'Выключено: ') + name);
+  await refreshTools();
+}
+
+async function setToolsAuto(on) {
+  await postJson('/api/tools/auto', { on: on });
+  toast(on ? 'Авто-выбор инструментов включён' : 'Авто-выбор выключен');
+  await refreshTools();
+}
+
+function wireTools() {
+  const auto = document.getElementById('toolsAuto');
+  if (auto) auto.addEventListener('change', function () { setToolsAuto(auto.checked); });
+  const manual = document.getElementById('mcpAddManual');
+  if (manual) manual.addEventListener('click', addMcpManual);
+}
+
 async function postJson(url, payload) {
   const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload || {}) });
   return resp.json();
@@ -836,6 +950,7 @@ async function addMcpCatalog(id) {
   toast(data.ok ? 'Добавлено: ' + item.title : (data.error || 'ошибка'));
   await loadMcp();
   renderMcp();
+  await refreshTools();
 }
 
 async function addMcpManual() {
@@ -847,6 +962,7 @@ async function addMcpManual() {
   toast(data.ok ? 'Сервер добавлен: ' + id : (data.error || 'ошибка'));
   await loadMcp();
   renderMcp();
+  await refreshTools();
 }
 
 async function testMcp(id) {
@@ -855,6 +971,7 @@ async function testMcp(id) {
   toast(data.ok ? ('Инструменты: ' + (data.tools || []).join(', ')) : ('Ошибка: ' + (data.error || 'не ответил')));
   await loadMcp();
   renderMcp();
+  await refreshTools();
 }
 
 async function removeMcp(id) {
@@ -862,6 +979,7 @@ async function removeMcp(id) {
   toast('Сервер удалён');
   await loadMcp();
   renderMcp();
+  await refreshTools();
 }
 
 let CURRENT_CHAT = "";
@@ -2427,6 +2545,7 @@ document.querySelectorAll('.tab').forEach(function (button) {
     if (button.dataset.tab === 'kb') loadKB();
     if (button.dataset.tab === 'tasks') loadTasks();
     if (button.dataset.tab === 'settings') { loadLan(); loadTelegram(); }
+    if (button.dataset.tab === 'tools') { loadTools().then(renderTools); }
   });
 });
 
@@ -2705,6 +2824,7 @@ bootStep('density', wireDensity);
 bootStep('drawerHeight', wireDrawerHeight);
 bootStep('rolesBlock', wireRolesBlock);
 bootStep('vision', wireVision);
+bootStep('tools', function () { wireTools(); return loadTools().then(renderTools); });
 bootStep('layout', wireLayout);
 bootStep('drop', wireDrop);
 bootStep('embeddings', wireEmbeddings);

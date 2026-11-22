@@ -4,6 +4,8 @@ from __future__ import annotations
 from . import diag
 
 import json
+import os
+import shutil
 import subprocess
 import threading
 import time
@@ -15,6 +17,15 @@ PREFIX = "mcp__"
 
 def _safe(text: str) -> str:
     return "".join(ch if ch.isalnum() else "_" for ch in str(text))[:40]
+
+
+def _argv(command: str, args: list) -> list:
+    """На Windows npx — это .cmd: запускаем через cmd.exe /c, иначе WinError 2."""
+    found = shutil.which(command) or shutil.which(command + ".cmd") or shutil.which(command + ".exe") or command
+    if found.lower().endswith((".cmd", ".bat")):
+        shell = os.environ.get("COMSPEC") or "cmd.exe"
+        return [shell, "/c", found] + list(args)
+    return [found] + list(args)
 
 
 class Session:
@@ -68,7 +79,7 @@ class Session:
         if self.proc is not None and self.proc.poll() is None:
             return self
         self.proc = subprocess.Popen(
-            [self.command] + self.args,
+            _argv(self.command, self.args),
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, encoding="utf-8", errors="replace",
             cwd=self.cwd, creationflags=NO_WINDOW,
@@ -172,6 +183,10 @@ def tools_for(servers: list) -> list:
 
 
 def call(name: str, args: dict, servers: list) -> str:
+    try:
+        tools_for(servers)  # поднять сессии, если инструмент вызывают первым
+    except Exception as exc:
+        diag.warn("mcp.py:call", exc)
     for server in servers or []:
         if not server.get("enabled", True):
             continue

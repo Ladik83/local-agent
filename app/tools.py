@@ -45,8 +45,124 @@ SCHEMAS = [
 
 READ_ONLY = {"list_files", "read_file", "fetch_url", "now", "calc", "find", "grep", "search_docs"}
 
+META = {
+    "list_files": {"title": "Список файлов", "danger": "чтение",
+                   "about": "Показать, что лежит в папке: имена файлов и подпапок.",
+                   "tags": ("папка", "каталог", "что лежит", "список", "директор", "содержимое папки")},
+    "read_file": {"title": "Чтение файла", "danger": "чтение",
+                  "about": "Открыть текстовый файл и прочитать его содержимое: код, конфиг, лог, документ.",
+                  "tags": ("файл", "прочитай", "открой", "содержимое", "код", "лог", "конфиг", "скрипт", "текст документа")},
+    "write_file": {"title": "Запись файла", "danger": "запись",
+                   "about": "Создать новый или перезаписать существующий текстовый файл.",
+                   "tags": ("запиши", "сохрани", "создай файл", "измени файл", "отредактируй", "перепиши")},
+    "run_command": {"title": "Команды в системе", "danger": "команды",
+                    "about": "Запустить команду cmd.exe и вернуть вывод: git, сборка, установка пакетов, скрипты.",
+                    "tags": ("запусти", "команда", "терминал", "консоль", "git ", "собери", "установи", "npm", "pip", "python ")},
+    "web_search": {"title": "Поиск в интернете", "danger": "сеть",
+                   "about": "Найти свежую информацию в интернете: новости, цены, курсы, документацию.",
+                   "tags": ("интернет", "в сети", "новост", "курс", "погода", "актуальн", "статья", "документац", "найди в интернете")},
+    "fetch_url": {"title": "Загрузка страницы", "danger": "сеть",
+                  "about": "Скачать конкретную страницу по ссылке и вернуть её текст.",
+                  "tags": ("ссылк", "url", "страниц", "сайт", "http")},
+    "now": {"title": "Дата и время", "danger": "чтение",
+            "about": "Текущие дата и время на этом компьютере.",
+            "tags": ("время", "дата", "который час", "сегодня", "число")},
+    "calc": {"title": "Калькулятор", "danger": "чтение",
+             "about": "Точно посчитать математическое выражение: проценты, доли, степени.",
+             "tags": ("посчитай", "вычисли", "сколько будет", "процент", "сумм", "умнож", "раздел", "калькулятор")},
+    "find": {"title": "Поиск файлов", "danger": "чтение",
+             "about": "Найти файлы по маске имени в папке: *.py, *config*.",
+             "tags": ("найди файл", "где лежит", "поиск файлов", "маска", "*.py", "найди папку")},
+    "grep": {"title": "Поиск по тексту файлов", "danger": "чтение",
+             "about": "Найти строки по тексту или регулярному выражению во всех файлах папки.",
+             "tags": ("найди в файлах", "поиск по тексту", "упомина", "встреча", "regex", "где используется", "найди в коде")},
+    "search_docs": {"title": "База знаний", "danger": "чтение",
+                    "about": "Найти ответ в проиндексированных папках и документах, с указанием источника.",
+                    "tags": ("база знаний", "в документах", "в знаниях", "по документам", "регламент", "инструкц")},
+}
 
-def schemas(cfg: dict):
+_VEC_CACHE = {"key": "", "vecs": {}}
+
+
+def catalog() -> list:
+    """Список встроенных инструментов для интерфейса."""
+    out = []
+    for schema in SCHEMAS:
+        meta = META.get(schema["name"], {})
+        out.append({
+            "name": schema["name"],
+            "title": meta.get("title") or schema["name"],
+            "about": schema.get("description") or "",
+            "danger": meta.get("danger") or "чтение",
+            "tags": list(meta.get("tags") or ()),
+        })
+    return out
+
+
+def _cos(a, b) -> float:
+    if not a or not b:
+        return 0.0
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+    return dot / (na * nb) if na and nb else 0.0
+
+
+def _about(item: dict) -> str:
+    return item["title"] + ". " + item["about"] + ". " + ", ".join(item["tags"])
+
+
+def _similarities(task: str, items: list) -> dict:
+    """Похожесть задачи на описание инструмента (эмбеддинги, с кэшем описаний)."""
+    try:
+        from . import embed
+        key = "|".join(item["name"] for item in items)
+        if _VEC_CACHE["key"] != key:
+            docs = embed.vectors([_about(item) for item in items], kind="document")
+            if not docs:
+                return {}
+            _VEC_CACHE.update(key=key, vecs={item["name"]: vec for item, vec in zip(items, docs)})
+        query = embed.vectors([task], kind="query")
+        if not query:
+            return {}
+        return {name: _cos(query[0], vec) for name, vec in _VEC_CACHE["vecs"].items()}
+    except Exception as exc:
+        diag.warn("tools.py:select", exc)
+        return {}
+
+
+def select(task: str, cfg: dict) -> list:
+    """Инструменты под задачу: ключевые слова + смысловая близость описаний."""
+    allowed = _allowed(cfg)
+    text = str(task or "").lower().strip()
+    if not text:
+        return sorted(allowed)
+    items = [item for item in catalog() if item["name"] in allowed]
+    hits = set()
+    for item in items:
+        if any(tag in text for tag in item["tags"]):
+            hits.add(item["name"])
+    sims = _similarities(text, items)
+    best = max(sims.values()) if sims else 0.0
+    # слова надёжнее смысла: добавляем не больше двух близких инструментов к найденным
+    extra = {name for name, score in sims.items()
+             if name not in hits and score >= max(0.76, best - 0.02)}
+    if hits:
+        picked = hits
+    elif best >= 0.75:
+        picked = set(sorted(sims, key=lambda name: -sims[name])[:2])
+    else:
+        return []
+    extra = set(sorted(extra, key=lambda name: -sims.get(name, 0.0))[:1])
+    ordered = sorted(picked | extra,
+                     key=lambda name: (name not in hits, -sims.get(name, 0.0)))
+    return ordered[:5]
+
+
+
+
+def _allowed(cfg: dict) -> set:
+    """Что разрешено настройками безопасности и не выключено вручную."""
     allowed = set(READ_ONLY)
     if cfg.get("allow_write"):
         allowed.add("write_file")
@@ -54,9 +170,17 @@ def schemas(cfg: dict):
         allowed.add("run_command")
     if cfg.get("allow_web"):
         allowed.add("web_search")
+    return allowed - {str(name) for name in (cfg.get("tools_off") or [])}
+
+
+def schemas(cfg: dict, task: str = None):
+    allowed = _allowed(cfg)
     only = cfg.get("_only_tools")
-    if only:
+    if only is not None:
         allowed = {name for name in allowed if name in set(only)}
+    elif task and cfg.get("tools_auto"):
+        picked = set(select(task, cfg))
+        allowed = {name for name in allowed if name in picked}
     schemas_out = [{"type": "function", "function": s} for s in SCHEMAS if s["name"] in allowed]
     servers = cfg.get("mcp") or []
     if servers and (not only or "mcp" in set(only)):

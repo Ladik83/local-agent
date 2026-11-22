@@ -700,3 +700,27 @@ body.hugeFont { --fs: 19px; }
 #visionModel { max-width: 460px; }
 .attachChip.image { border-color: var(--accent); }
 .attachChip.image::before { content: '🖼 '; }
+
+/* ---------- вкладка «Инструменты» ---------- */
+.toolRow { align-items: flex-start; }
+.toolRow .sub { display: block; margin-top: 2px; }
+.badgeDanger {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--warn);
+  border: 1px solid var(--warn); border-radius: 999px; padding: 0 6px; margin-left: 6px;
+}
+.mcpCard {
+  display: flex; gap: 12px; align-items: flex-start; justify-content: space-between;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel2);
+  padding: 10px 12px; margin: 8px 0;
+}
+.mcpCard b { font-size: 13.5px; }
+.mcpCard .sub { display: block; margin-top: 3px; }
+.mcpCard button { flex: none; }
+.mcpTools { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.mcpTool { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+
+.toolsCols { display: flex; gap: 12px; align-items: flex-start; }
+.toolsCols > .panel { flex: 1 1 0; min-width: 0; margin: 0; }
+.toolRow { padding: 5px 0; }
+.toolRow .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1200px) { .toolsCols { flex-direction: column; } }

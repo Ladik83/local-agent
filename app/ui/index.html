@@ -16,6 +16,7 @@
  <button class="tab active" data-tab="chat">Чат</button>
  <button class="tab" data-tab="models">Модели</button>
  <button class="tab" data-tab="agents">Команда</button>
+ <button class="tab" data-tab="tools">Инструменты</button>
  <button class="tab" data-tab="tasks">Задачи</button>
  <button class="tab" data-tab="kb">Знания</button>
  <button class="tab" data-tab="settings">Настройки</button>
@@ -208,6 +209,33 @@
  <div class="row"><span></span><button class="primary" id="saveRoles">Сохранить роли</button></div>
  </section>
 
+ <section id="view-tools" class="view">
+ <h2>Инструменты и MCP</h2>
+ <div class="panel">
+  <div class="row"><span>Авто-выбор инструментов под задачу<span class="help" data-tip="Перед каждым вопросом агент подбирает только нужные инструменты: по словам задачи и по смыслу описаний. В чате появится строка с выбранным набором.">?</span></span>
+   <input type="checkbox" id="toolsAuto"></div>
+  <div class="sub" id="toolsAutoHint">Выключено: агенту доступны все разрешённые инструменты.</div>
+ </div>
+ <div class="toolsCols">
+ <div class="panel">
+  <h4>Встроенные инструменты</h4>
+  <div class="sub">Галочка выключает инструмент целиком; серые недоступны, пока не разрешены в «Настройках» (запись, команды, интернет).</div>
+  <div id="toolsBuiltin"></div>
+ </div>
+ <div class="panel">
+  <h4>Каталог MCP-серверов</h4>
+  <div class="sub" id="mcpEnv"></div>
+  <div id="mcpCatalog"></div>
+ </div>
+ </div>
+ <div class="panel">
+  <h4>Подключённые серверы</h4>
+  <div id="mcpServers"></div>
+  <div class="row"><span>Добавить вручную</span><input type="text" id="mcpCmd" class="wide" placeholder="npx -y @modelcontextprotocol/server-memory"></div>
+  <div class="row"><span></span><span><button class="ghost" id="mcpAddManual">Добавить</button></span></div>
+ </div>
+ </section>
+
  <section id="view-settings" class="view">
  <h2>Модель и подключение</h2>
  <div class="panel" id="providerPanel"></div>
@@ -221,7 +249,6 @@
   <div class="row"><span>Ваш chat id</span><input type="text" id="tgChat" placeholder="300833077"></div>
   <div class="row"><span class="sub" id="tgState"></span><button class="ghost" id="tgSave">Сохранить и проверить</button></div>
  </div>
- <div class="panel" id="mcpPanel"></div>
  <h2>Настройки</h2>
  <div class="panel" id="voicePanel"></div>
  <div class="panel" id="enginePanel"></div>

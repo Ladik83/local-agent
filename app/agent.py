@@ -144,15 +144,43 @@ def _call(convo: list, cfg: dict, emit, target: dict, allow_tools: bool = True):
 def chat_plain(convo: list, cfg: dict, emit, target: dict) -> list:
     """Один ответ без инструментов — для моделей зрения и простых задач."""
     convo = list(convo)
+    cfg = _prepare_tools(cfg, _last_user_text(convo), emit)
     text, _calls = _call(convo, cfg, emit, target, allow_tools=False)
     convo.append({"role": "assistant", "content": text})
     emit({"type": "done", "messages": _clean(convo)})
     return convo
 
 
+def _last_user_text(convo: list) -> str:
+    for item in reversed(convo):
+        if item.get("role") == "user":
+            content = item.get("content")
+            if isinstance(content, list):
+                return " ".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
+            return str(content or "")
+    return ""
+
+
+def _prepare_tools(cfg: dict, task: str, emit) -> dict:
+    """Авто-выбор инструментов под задачу: один раз на запрос, с пометкой в чате."""
+    if not cfg.get("tools_auto") or not task:
+        return cfg
+    cfg = dict(cfg)
+    picked = tools.select(task, cfg)
+    allowed = tools._allowed(cfg)
+    if cfg.get("mcp") and (picked or len(task) > 25):
+        picked = list(picked) + ["mcp"]
+    cfg["_only_tools"] = picked
+    if picked != sorted(allowed):
+        label = ", ".join(picked) if picked else "без инструментов"
+        emit({"type": "note", "text": "Инструменты под задачу: " + label})
+    return cfg
+
+
 def chat(convo: list, cfg: dict, emit, target: dict = None) -> list:
     """Полный цикл: ответ, инструменты, ответ. emit получает события для UI."""
     convo = _compact(list(convo), cfg, emit, target)
+    cfg = _prepare_tools(cfg, _last_user_text(convo), emit)
     for _step in range(MAX_STEPS):
         if STOP["flag"]:
             emit({"type": "cancelled", "text": "Остановлено пользователем"})
