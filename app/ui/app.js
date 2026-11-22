@@ -828,11 +828,20 @@ let TOOLS_INFO = { builtin: [], mcp_catalog: [], servers: [], off: [], allowed: 
 
 async function loadTools() {
   try {
-    TOOLS_INFO = await (await fetch('/api/tools')).json();
+    const response = await fetch('/api/tools');
+    if (!response.ok) throw new Error('сервер ответил ' + response.status);
+    TOOLS_INFO = await response.json();
   } catch (error) {
-    TOOLS_INFO = TOOLS_INFO || {};
+    TOOLS_INFO = { builtin: [], mcp_catalog: [], servers: [], off: [], allowed: [],
+      auto: false, failed: String(error && error.message ? error.message : error) };
   }
   return TOOLS_INFO;
+}
+
+function toolsFailure() {
+  const info = TOOLS_INFO || {};
+  if (!info.failed) return '';
+  return 'Не удалось получить каталог (' + esc(info.failed) + '). Похоже, приложение запущено со старой версией сервера — закройте и запустите его снова.';
 }
 
 function renderTools() {
@@ -846,10 +855,11 @@ function renderTools() {
       : 'Выключено: агенту доступны все разрешённые инструменты.';
   }
   const box = document.getElementById('toolsBuiltin');
+  const failure = toolsFailure();
   if (box) {
     const off = info.off || [];
     const allowed = info.allowed || [];
-    box.innerHTML = (info.builtin || []).map(function (item) {
+    box.innerHTML = failure || (info.builtin || []).map(function (item) {
       const enabled = off.indexOf(item.name) < 0;
       const perm = allowed.indexOf(item.name) >= 0;
       const danger = item.danger && item.danger !== 'чтение' ? '<span class="badgeDanger">' + esc(item.danger) + '</span>' : '';
@@ -863,12 +873,22 @@ function renderTools() {
   }
   const env = document.getElementById('mcpEnv');
   if (env) {
-    const tc = info.toolchains || {};
-    env.textContent = 'Что установлено: Node.js/npx — ' + (tc.node ? 'есть' : 'нет') +
-      ', Python/uvx — ' + (tc.python ? 'есть' : 'нет') + '.';
+    if (failure) {
+      env.textContent = failure;
+    } else if (!info.toolchains) {
+      env.textContent = 'Не удалось проверить, что установлено на компьютере.';
+    } else {
+      const tc = info.toolchains;
+      env.textContent = 'Что установлено: Node.js/npx — ' + (tc.node ? 'есть' : 'нет') +
+        ', Python/uvx — ' + (tc.python ? 'есть' : 'нет') + '.';
+    }
   }
   const catalog = document.getElementById('mcpCatalog');
   if (catalog) {
+    if (failure) {
+      catalog.innerHTML = '<div class="sub">' + failure + '</div>';
+      return;
+    }
     catalog.innerHTML = (info.mcp_catalog || []).map(function (item) {
       const need = item.needs === 'python' ? 'Python и uv' : 'Node.js';
       return '<div class="mcpCard"><div><b>' + esc(item.title) + '</b>' +
