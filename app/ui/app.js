@@ -2485,9 +2485,15 @@ async function stopRecording() {
   handleVoiceText(text);
 }
 
-function handleVoiceText(text) {
+function openChatTab() {
+  const tab = document.querySelector('.tab[data-tab="chat"]');
+  if (tab && !tab.classList.contains('active')) tab.click();
+}
+
+async function handleVoiceText(text) {
   const clean = String(text || "").trim();
   if (!clean) { toast('Ничего не разобрал — попробуйте ещё раз'); return; }
+  openChatTab();
   const low = clean.toLowerCase().replace(/[.!?]+$/, "");
   const short = low.split(/\s+/).length <= 4;
   if (short && low.indexOf('новый чат') >= 0) { newChat(); toast('Сделал: новый чат'); return; }
@@ -2502,20 +2508,26 @@ function handleVoiceText(text) {
     if (solo) solo.click();
     return;
   }
-  const open = low.match(/^открой папку (.+)$/);
-  if (open) {
-    postJson('/api/open', { path: open[1].trim() });
-    toast('Открываю ' + open[1].trim());
-    return;
+  const open = clean.match(/^открой папку (.+)$/i);
+  if (open && clean.split(/\s+/).length <= 6) {
+    const target = open[1].trim().replace(/[.!?]+$/, '');
+    const result = await postJson('/api/open', { path: target });
+    if (result && result.ok) {
+      toast('Открываю ' + target);
+      return;
+    }
+    // папка не нашлась — не теряем фразу, вставляем её в поле ввода
   }
   const input = document.getElementById('input');
+  if (!input) { toast('Поле ввода не найдено — откройте вкладку «Чат»'); return; }
   input.value = clean;
   input.classList.add('voiceFill');
   input.focus();
   input.setSelectionRange(clean.length, clean.length);
   input.style.height = 'auto';
   input.style.height = Math.min(input.scrollHeight, 200) + 'px';
-  toast('Распознано (' + clean.length + ' символов) — проверьте и нажмите «Отправить»');
+  toast('Распознано: «' + clean.slice(0, 40) + (clean.length > 40 ? '…' : '') +
+    '» — проверьте и отправьте');
   setTimeout(function () { input.classList.remove('voiceFill'); }, 2500);
 }
 
