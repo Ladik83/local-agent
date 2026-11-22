@@ -55,6 +55,11 @@ check("слой подсказок", 'id="tipLayer"' in html and ".tipLayer" in 
 check("подсказки ролей в коде", "function wireRolesBlock()" in app and "showRoleTip" in app)
 check("список ролей рисуется", "function renderRolesMenu()" in app)
 
+row_html = html.split('class="modelRow"')[1].split('id="composer"')[0]
+check("режимы в строке модели", 'class="modes"' in row_html)
+check("короткие подписи режимов", ">Один<span" in html and ">Команда<span" in html)
+check("шаблоны компактные", "min-height: 24px" in css and ".templates { display: flex; gap: 4px" in css)
+check("селект модели сжимается", "flex: 1 1 220px" in css)
 for name in ("app.js", "panels.js"):
     res = subprocess.run(["node", "--check", str(UI / name)], capture_output=True, text=True)
     check("node --check " + name, res.returncode == 0, res.stderr.strip()[:120])

@@ -300,7 +300,7 @@ table.roles select, table.roles input[type=text] { width: 100%; }
   white-space: normal; box-shadow: 0 12px 30px rgba(0, 0, 0, .55); text-align: left;
   font-weight: 400; letter-spacing: 0;
 }
-.modes { display: flex; gap: 8px; padding: 10px 0 2px; flex-wrap: wrap; align-items: center; }
+.modes { display: flex; gap: 6px; padding: 0; flex-wrap: nowrap; align-items: center; }
 .mode {
   display: inline-flex; align-items: center; gap: 6px; background: var(--panel2);
   border: 1px solid var(--line); color: var(--muted); border-radius: 11px;
@@ -410,11 +410,11 @@ footer.statusbar { flex: 0 0 auto; z-index: 30; }
 #kbList .row { border-bottom: 1px dashed var(--line); }
 #kbList .row:last-child { border-bottom: 0; }
 
-.templates { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 0 2px; }
+.templates { display: flex; gap: 4px; flex-wrap: wrap; padding: 2px 0 0; align-items: center; }
 .chip {
   background: var(--panel2); border: 1px solid var(--line); color: var(--muted);
-  border-radius: 99px; padding: 5px 12px; font: inherit; font-size: 12.5px; cursor: pointer;
-  min-height: 32px;
+  border-radius: 99px; padding: 2px 9px; font: inherit; font-size: 11.5px; cursor: pointer;
+  min-height: 24px; line-height: 1.5; white-space: nowrap;
 }
 .chip:hover { color: var(--text); border-color: var(--accent); }
 
@@ -544,11 +544,12 @@ body.hugeFont { --fs: 19px; }
 .hfRow input { min-width: 260px; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 
-.modelRow { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; flex-wrap: wrap; }
+.modelRow { display: flex; align-items: center; gap: 8px; padding: 6px 0 2px; flex-wrap: nowrap; }
 .modelLabel { color: var(--muted); font-size: 12.5px; }
 .modelPick {
   background: var(--panel2); color: var(--text); border: 1px solid var(--line);
-  border-radius: 9px; padding: 5px 8px; font: inherit; font-size: 12.5px; max-width: 460px;
+  border-radius: 9px; padding: 5px 8px; font: inherit; font-size: 12.5px;
+  flex: 1 1 220px; min-width: 120px; max-width: 420px;
 }
 .modelPick:disabled { opacity: .7; }
 .modelRow .sub { margin: 0; }
@@ -683,3 +684,14 @@ body.hugeFont { --fs: 19px; }
 .tipRow { color: var(--muted); }
 .tipText { margin-top: 5px; }
 .tipHint { margin-top: 6px; color: var(--muted); font-size: 11px; }
+
+/* ---------- режимы в строке модели, компактно ---------- */
+.modelRow .modes { margin-left: auto; }
+.modelRow .mode { padding: 3px 9px; font-size: 12px; border-radius: 8px; min-height: 28px; gap: 4px; }
+.modelRow .mode .help { font-size: 10.5px; width: 14px; height: 14px; line-height: 14px; }
+.modelRow .sub { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 1100px) {
+  .modelRow { flex-wrap: wrap; }
+  .modelRow .modes { margin-left: 0; }
+}
