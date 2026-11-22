@@ -113,6 +113,8 @@ def install(tag: str, variant: str = "cpu") -> dict:
             exe = next(staging.glob("**/" + EXE), None)
             if exe is None:
                 return {"ok": False, "error": "в архиве нет llama-server"}
+            if variant == "vulkan" and not has_vulkan(exe.parent):
+                return _vulkan_fallback(tag, staging)
             if target.exists():
                 shutil.rmtree(str(target), ignore_errors=True)
             shutil.move(str(exe.parent), str(target))
@@ -127,6 +129,40 @@ def install(tag: str, variant: str = "cpu") -> dict:
         except Exception as exc:
             JOB.update(active=False, error=str(exc), text="Ошибка установки движка")
             return {"ok": False, "error": str(exc)}
+
+
+VULKAN_DLL = "ggml-vulkan.dll"
+
+
+def has_vulkan(folder) -> bool:
+    """В папке сборки есть Vulkan-бэкенд? По имени папки верить нельзя."""
+    path = pathlib.Path(str(folder or ""))
+    if path.is_file():
+        path = path.parent
+    return (path / VULKAN_DLL).exists()
+
+
+def _vulkan_fallback(tag: str, staging) -> dict:
+    """В свежей сборке не оказалось Vulkan — включаем ближайшую рабочую на диске."""
+    shutil.rmtree(str(staging), ignore_errors=True)
+    best = None
+    for item in local_builds():
+        folder = pathlib.Path(item["exe"]).parent
+        if not has_vulkan(folder):
+            continue
+        parts = folder.name.split("-")
+        if len(parts) >= 3 and parts[2] == "vulkan":
+            best = (parts[1], folder)
+            break
+    if best is None:
+        JOB.update(active=False, error="нет сборки с Vulkan")
+        return {"ok": False, "error": "в сборке %s нет Vulkan (ggml-vulkan.dll) и других "
+                                      "Vulkan-сборок на диске нет" % tag}
+    skip = [str(item) for item in (config.load().get("engine_skip") or []) if str(item) != tag]
+    config.save({"engine_tag": best[0], "engine_variant": "vulkan", "engine_skip": skip + [tag]})
+    JOB.update(active=False, pct=100.0, text="Vulkan: сборка %s" % best[0], result=str(best[1]))
+    return {"ok": True, "path": str(best[1]), "tag": best[0], "fallback": True,
+            "message": "в сборке %s нет Vulkan — включена сборка %s" % (tag, best[0])}
 
 
 def local_builds():
@@ -147,11 +183,14 @@ def find_exe():
     tag, variant = cfg.get("engine_tag"), cfg.get("engine_variant")
     if tag and variant:
         cand = config.ENGINES_DIR / ("llamacpp-%s-%s" % (tag, variant)) / EXE
-        if cand.exists():
+        if cand.exists() and (variant != "vulkan" or has_vulkan(cand)):
             return str(cand)
     found = local_builds()
     if found:
-        return found[-1]["exe"]
+        def rank(item):
+            folder = pathlib.Path(item["exe"]).parent
+            return (0 if has_vulkan(folder) else 1, [-ord(ch) for ch in item["name"]])
+        return sorted(found, key=rank)[0]["exe"]
     for folder in (pathlib.Path.home() / ".lmstudio" / "extensions" / "backends",
                    pathlib.Path.home() / ".chipdeil" / "engines" / "llamacpp"):
         if not folder.is_dir():
@@ -162,6 +201,51 @@ def find_exe():
         if candidates:
             return str(candidates[0])
     return None
+
+
+DEVICES = {"exe": "", "checked": 0.0, "items": []}
+
+
+def devices(exe=None, force: bool = False) -> list:
+    """Какие устройства видит движок. Пусто — значит сборка без Vulkan."""
+    exe = exe or find_exe()
+    if not exe:
+        return []
+    if (not force and DEVICES["exe"] == exe and DEVICES["items"]
+            and time.time() - DEVICES["checked"] < 300):
+        return DEVICES["items"]
+    items = []
+    try:
+        out = subprocess.run([exe, "--list-devices"], capture_output=True, timeout=90,
+                             creationflags=NO_WINDOW).stdout.decode("utf-8", "replace")
+        for line in out.splitlines():
+            line = line.strip()
+            if ":" in line and not line.lower().startswith("available"):
+                name, _, rest = line.partition(":")
+                if name.lower().startswith(("vulkan", "cuda", "metal", "sycl")):
+                    items.append({"name": name.strip(), "text": rest.strip()})
+    except (OSError, subprocess.SubprocessError) as exc:
+        diag.warn("engine.py:devices", exc)
+    DEVICES.update({"exe": exe, "checked": time.time(), "items": items})
+    return items
+
+
+def offload_info(log_path, gpu_name: str = "") -> dict:
+    """Что движок написал про выгрузку: видеокарту и число слоёв."""
+    try:
+        text = pathlib.Path(log_path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}
+    info = {"gpu": "", "layers": "", "on_gpu": False}
+    hits = re.findall(r"device (Vulkan\d|CUDA\d|Metal|SYCL\d)", text)
+    bad = re.search(r"no usable GPU|failed to (?:initialize|find) Vulkan|not supported by device", text, re.I)
+    info["on_gpu"] = bool(hits) and not bad
+    layers = re.search(r"offloaded (\d+/\d+) layers to GPU", text)
+    if layers:
+        info["layers"] = layers.group(1)
+    if info["on_gpu"]:
+        info["gpu"] = gpu_name or (hits[0] if hits else "видеокарта")
+    return info
 
 
 STARTUP = {"tag": "", "latest": "", "checked": 0.0, "error": ""}
@@ -199,7 +283,9 @@ def status() -> dict:
         "tag": cfg.get("engine_tag"),
         "variant": cfg.get("engine_variant"),
         "latest": latest,
-        "update_available": bool(latest and cfg.get("engine_tag") and latest != cfg.get("engine_tag")),
+        "update_available": bool(latest and cfg.get("engine_tag") and latest != cfg.get("engine_tag")
+                                 and latest not in [str(item) for item in (cfg.get("engine_skip") or [])]),
+        "skipped": [str(item) for item in (cfg.get("engine_skip") or [])],
         "running": running,
         "port": SERVER["port"],
         "model": SERVER["model"],
@@ -207,6 +293,10 @@ def status() -> dict:
         "used_mb": memory_mb(SERVER.get("proc")),
         "job": dict(JOB),
         "local": local_builds(),
+        "devices": devices(exe),
+        "vulkan": bool(exe and has_vulkan(exe)),
+        "gpu_mode": cfg.get("gpu") or "auto",
+        "offload": SERVER.get("offload") or {},
     }
 
 
@@ -349,11 +439,17 @@ def start(model_path: str, ctx=None, ngl=None) -> dict:
     stop()
     port = free_port()
     ctx = int(ctx or cfg.get("context") or 8192)
-    ngl = int(ngl if ngl is not None else (cfg.get("ngl") or 99))
+    want = str(cfg.get("gpu") or "auto")
+    found = devices(exe)
+    if ngl is None:
+        ngl = 0 if want == "cpu" or not found else int(cfg.get("ngl") or 99)
+    ngl = int(ngl)
     log_path = config.LOGS_DIR / "llama-server.log"
     projector = find_projector(model_path)
     cmd = [exe, "-m", model_path, "--host", "127.0.0.1", "--port", str(port),
-           "-c", str(ctx), "-ngl", str(ngl), "--no-warmup", "--embeddings", "--pooling", "mean"]
+           "-c", str(ctx), "-ngl", str(ngl), "--no-warmup"]
+    if ngl > 0 and found:
+        cmd += ["--device", found[0]["name"]]
     if projector:
         cmd += ["--mmproj", projector]
     last_log = ""
@@ -368,7 +464,10 @@ def start(model_path: str, ctx=None, ngl=None) -> dict:
         SERVER.update({"proc": proc, "port": port, "model": model_path, "projector": projector,
                        "started": time.time(), "error": None})
         if _healthy(port, 300):
-            return {"ok": True, "port": port, "log": str(log_path)}
+            gpu_name = re.sub(r"\s*\(\d.*$", "", found[0]["text"]).strip() if found else ""
+            SERVER["offload"] = offload_info(log_path, gpu_name)
+            return {"ok": True, "port": port, "log": str(log_path),
+                    "offload": SERVER["offload"], "ngl": ngl}
         last_log = tail(log_path)
         SERVER["error"] = "модель не запустилась"
         stop()

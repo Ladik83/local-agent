@@ -343,6 +343,13 @@ function renderSettings() {
     '</span><span>' +
     (e.installed ? badge('готов', 'ok') : badge('не установлен', 'no')) + '</span></div>';
   html += '<div class="row"><span>Версия</span><span>' + esc(e.tag || (e.exe ? 'внешняя сборка' : '—')) + '</span></div>';
+  const gpu = (e.devices || [])[0];
+  const backend = e.vulkan && gpu
+    ? badge('Vulkan · ' + String(gpu.text || '').replace(/\s*\(\d.*$/, '').trim(), 'ok')
+    : badge('процессор (нет Vulkan)', 'warn');
+  html += '<div class="row"><span>На чём считает' +
+    tip('Vulkan — сборка llama.cpp с поддержкой видеокарты. Если стоит сборка без ggml-vulkan.dll, модель считает процессор, даже когда выбрана видеокарта.') +
+    '</span><span>' + backend + '</span></div>';
   const check = (STATE || {}).engine_check || {};
   const latest = e.latest || check.latest || '';
   html += '<div class="row"><span>Последняя доступная</span><span>' + esc(latest || '—') +
@@ -367,6 +374,9 @@ function renderSettings() {
   html += '<div class="row"><span>Установить свежую сборку</span><span>' +
     '<button class="ghost" onclick="installEngine(\'vulkan\')">Vulkan (быстрее на видеокарте)</button> ' +
     '<button class="ghost" onclick="installEngine(\'cpu\')">CPU</button></span></div>';
+  if ((e.skipped || []).length) {
+    html += '<div class="advice">Пропущены сборки без Vulkan: ' + esc(e.skipped.join(', ')) + '</div>';
+  }
   html += '<div class="sub">' + (e.exe ? 'Файл: ' + esc(e.exe) : 'llama.cpp будет скачан в папку приложения') + '</div>';
   document.getElementById('enginePanel').innerHTML = html;
   const checkBtn = document.getElementById('engineCheck');
@@ -783,8 +793,11 @@ async function installEngine(variant) {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ variant: variant })
   });
   const data = await resp.json();
-  toast(data.ok ? 'Скачиваю llama.cpp ' + data.tag : (data.error || 'ошибка'));
+  if (!data.ok) toast(data.error || 'ошибка');
+  else if (data.fallback) toast(data.message || 'Включена другая сборка с Vulkan');
+  else toast('Скачиваю llama.cpp ' + data.tag);
   poll();
+  await loadState();
 }
 
 async function discoverModels() {
@@ -2459,7 +2472,6 @@ function render() {
     : (STATE.engine.installed ? 'модель не загружена' : 'движок не установлен');
   renderHardware();
   renderAdvice();
-  renderTuning();
   if (window.Panels && window.Panels.renderAll) {
     try { window.Panels.renderAll(); } catch (error) { console.error('panels', error); }
   }
@@ -2554,31 +2566,6 @@ function renderAdvice() {
   Array.from(box.querySelectorAll('[data-load]')).forEach(function (button) {
     button.onclick = function () { loadModelDirect(button.getAttribute('data-load')); };
   });
-}
-
-function renderTuning() {
-  const box = document.getElementById('modelTuning');
-  if (!box) return;
-  const s = STATE.settings || {};
-  const temp = Number(s.temperature || 0.7);
-  const ctx = Number(s.context || 8192);
-  const temps = [[0.2, 'точная'], [0.4, 'спокойная'], [0.7, 'обычная'], [1, 'смелая']];
-  const ctxs = [[4096, '4 тыс.'], [8192, '8 тыс.'], [16384, '16 тыс.'], [32768, '32 тыс.']];
-  let html = '<div class="tuneRow"><span>Температура</span><select id="tuneTemp">';
-  temps.forEach(function (pair) {
-    html += '<option value="' + pair[0] + '"' + (Math.abs(pair[0] - temp) < 0.05 ? ' selected' : '') + '>' + pair[1] + '</option>';
-  });
-  html += '</select></div>';
-  html += '<div class="tuneRow"><span>Контекст</span><select id="tuneCtx">';
-  ctxs.forEach(function (pair) {
-    html += '<option value="' + pair[0] + '"' + (pair[0] === ctx ? ' selected' : '') + '>' + pair[1] + ' токенов</option>';
-  });
-  html += '</select></div>';
-  box.innerHTML = html;
-  const t = document.getElementById('tuneTemp');
-  const c = document.getElementById('tuneCtx');
-  if (t) t.onchange = function () { postJson('/api/settings', { temperature: Number(t.value) }); };
-  if (c) c.onchange = function () { postJson('/api/settings', { context: Number(c.value) }); };
 }
 
 async function openGear() {

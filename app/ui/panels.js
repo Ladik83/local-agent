@@ -387,6 +387,14 @@
       html += row('Контекст', context !== null && context > 0 ? (context + ' токенов') : '—');
       html += rowHtml('Статус', '<span style="color:' + (loaded ? 'var(--ok)' : 'var(--muted)') + '">' +
         esc(loaded ? 'загружена' : 'не загружена') + '</span>');
+      var offload = (engine.offload) || {};
+      if (loaded) {
+        var where = offload.on_gpu
+          ? text(offload.gpu, 'видеокарта') + (offload.layers ? ' · ' + offload.layers : '')
+          : 'процессор';
+        html += row('Считает', esc(where));
+      }
+      if (window.patchBox) window.patchBox(box, html); else box.innerHTML = html;
       var loadBtn = box.querySelector('[data-panels-act="load"]');
       if (loadBtn) loadBtn.onclick = function () { loadModel(recommendedPath()); };
       var unloadBtn = box.querySelector('[data-panels-act="unload"]');
@@ -525,12 +533,29 @@
           (CTX_VALUES[j] === selectedCtx ? ' selected' : '') + '>' + esc(ctxLabel(CTX_VALUES[j])) + '</option>';
       }
       html += '</select></div>';
+      var gpuMode = text(settings.gpu, 'auto');
+      var gpuDevices = (state().engine || {}).devices || [];
+      html += '<div class="tuneRow"><span title="Видеокарта считает промпт в разы быстрее. Процессор — если видеокарта занята или её нет.">Считать на</span><select id="panelsGpu">' +
+        '<option value="auto"' + (gpuMode === 'auto' ? ' selected' : '') + '>видеокарта, если есть</option>' +
+        '<option value="gpu"' + (gpuMode === 'gpu' ? ' selected' : '') + '>только видеокарта</option>' +
+        '<option value="cpu"' + (gpuMode === 'cpu' ? ' selected' : '') + '>процессор</option></select></div>';
+      if (!gpuDevices.length) {
+        html += '<div class="advice">Движок без Vulkan — модель пойдёт в память процессора.</div>';
+      }
       html += '<div class="tuneRow"><span>Своё значение</span><input type="number" id="panelsCtxManual" min="512" max="262144" step="512" value="' + context + '"></div>';
       html += '<div class="tuneRow"><span></span><button class="ghost tiny" id="panelsCtxApply">Применить</button></div>';
       if (window.patchBox) window.patchBox(box, html); else box.innerHTML = html;
       var tempSelect = byId('panelsTemp');
       var ctxSelect = byId('panelsCtx');
       var manualCtx = byId('panelsCtxManual');
+      var gpuSelect = byId('panelsGpu');
+      if (gpuSelect) {
+        gpuSelect.onchange = function () {
+          var value = gpuSelect.value;
+          var label = value === 'cpu' ? 'процессор' : (value === 'gpu' ? 'только видеокарта' : 'видеокарта, если есть');
+          saveSetting('gpu', value, 'Считать на: ' + label);
+        };
+      }
       var applyCtx = byId('panelsCtxApply');
       if (applyCtx && manualCtx) {
         applyCtx.onclick = function () {

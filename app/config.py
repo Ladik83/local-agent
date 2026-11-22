@@ -115,6 +115,8 @@ DEFAULTS: dict = {
     "update_pubkey": "",          # открытый ключ ECDSA P-256 для подписи манифеста
     "telegram_chat": "",          # куда бот пишет отчёты
     "context": 8192,             # размер контекста
+    "gpu": "auto",                 # auto | gpu | cpu — где считать модель
+    "engine_skip": [],             # сборки без Vulkan — не предлагать
     "ngl": 99,                   # слоёв на GPU
     "temperature": 0.7,
     "allow_write": False,        # агент может менять файлы
