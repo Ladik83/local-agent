@@ -69,6 +69,8 @@ try:
 finally:
     config.ENGINES_DIR = saved_dir2
     config.save({"engine_tag": saved_cfg.get("engine_tag"), "engine_variant": saved_cfg.get("engine_variant")})
+    clean = [item for item in (config.load().get("engine_skip") or []) if item in ("b12633",)]
+    config.save({"engine_skip": clean})
 
 check("по умолчанию видеокарта", (config.DEFAULTS.get("gpu") or "") == "auto", str(config.DEFAULTS.get("gpu") or ""))
 
