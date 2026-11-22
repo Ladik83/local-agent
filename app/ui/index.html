@@ -212,10 +212,24 @@
  </section>
 
  <section id="view-agents" class="view">
- <h2>Команда агентов</h2>
+  <div class="viewHead">
+   <div>
+    <h2>Команда агентов</h2>
     <p class="sub">Своя роль, свои размышления, свои инструменты. План делит задача.</p>
- <div class="panel" id="rolesPanel"></div>
- <div class="row"><span></span><button class="primary" id="saveRoles">Сохранить роли</button></div>
+   </div>
+   <div class="viewActions">
+    <button class="ghost" id="addRole" title="Создать новую роль и описать её">+ Добавить роль</button>
+    <button class="ghost" id="resetRoles" title="Вернуть стандартные роли и убрать все правки">Сбросить</button>
+    <button class="primary" id="saveRoles">Сохранить роли</button>
+   </div>
+  </div>
+  <div class="teamCols">
+   <div class="teamList">
+    <div class="teamListHead">Роли <span class="sub" id="rolesCount"></span></div>
+    <div class="roleList" id="roleList"></div>
+   </div>
+   <div class="teamEditor" id="roleEditor"></div>
+  </div>
  </section>
 
  <section id="view-tools" class="view">

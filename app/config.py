@@ -101,6 +101,7 @@ DEFAULTS: dict = {
     "voice_model": "turbo",      # base | small | turbo
     "voice_lang": "ru",          # ru | en | auto
     "roles": [],                 # правки ролей поверх стандартных
+    "roles_removed": [],          # скрытые стандартные роли
     "engine_tag": None,          # например b12421
     "engine_variant": None,      # vulkan | cpu
     "last_model": None,

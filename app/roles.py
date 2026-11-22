@@ -85,8 +85,11 @@ ORCHESTRATOR_PROMPT = (
 def merge(cfg: dict) -> list:
     """Роли с учётом правок пользователя (по id)."""
     saved = {item.get("id"): item for item in (cfg.get("roles") or []) if isinstance(item, dict)}
+    removed = {str(item) for item in (cfg.get("roles_removed") or [])}
     result = []
     for base in DEFAULT_ROLES:
+        if base["id"] in removed:
+            continue
         item = dict(base)
         item.update(saved.get(base["id"], {}))
         result.append(item)
@@ -103,7 +106,7 @@ def get(cfg: dict, role_id: str):
     return None
 
 
-def save(cfg: dict, rows: list) -> None:
+def save(cfg: dict, rows: list, removed=None) -> None:
     clean = []
     for row in rows or []:
         if not isinstance(row, dict) or not row.get("id"):
@@ -115,7 +118,11 @@ def save(cfg: dict, rows: list) -> None:
             "tools": row.get("tools") if isinstance(row.get("tools"), list) else "all",
             "prompt": str(row.get("prompt") or ""),
         })
-    config.save({"roles": clean})
+    payload = {"roles": clean}
+    if removed is not None:
+        known = {base["id"] for base in DEFAULT_ROLES}
+        payload["roles_removed"] = [str(item) for item in removed if str(item) in known]
+    config.save(payload)
 
 
 def tools_of(role: dict) -> list:

@@ -117,6 +117,31 @@ def _expand_args(args) -> list:
     return out
 
 
+def _model_once(cfg: dict, system: str, user: str, max_tokens: int = 160) -> str:
+    """Один короткий ответ модели без потока — для подсказок интерфейса."""
+    target = providers.resolve(cfg)
+    if target.get("kind") == "local" and not target.get("base_url"):
+        raise RuntimeError("модель не загружена — загрузите её в панели «Модель»")
+    url = (target.get("base_url") or "").rstrip("/") + "/chat/completions"
+    body = {
+        "model": target.get("model") or "local",
+        "temperature": 0.4,
+        "max_tokens": max_tokens,
+        "stream": False,
+        "messages": [{"role": "system", "content": system},
+                     {"role": "user", "content": user}],
+    }
+    request = urllib.request.Request(url, data=json.dumps(body, ensure_ascii=False).encode(),
+                                     headers=providers._headers(target.get("api_key") or ""),
+                                     method="POST")
+    with urllib.request.urlopen(request, timeout=120) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    choices = data.get("choices") or []
+    if not choices:
+        raise RuntimeError("модель вернула пустой ответ")
+    return str((choices[0].get("message") or {}).get("content") or "").strip()
+
+
 def _toolchains() -> dict:
     import shutil
     return {"node": bool(shutil.which("npx")), "python": bool(shutil.which("uvx"))}
@@ -875,8 +900,28 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception as exc:
                         self._send({"ok": False, "error": str(exc)})
             elif route == "/api/roles":
-                roles.save(config.load(), data.get("roles") or [])
-                self._send({"ok": True, "roles": roles.merge(config.load())})
+                roles.save(config.load(), data.get("roles") or [], data.get("removed") or [])
+                merged = roles.merge(config.load())
+                self._send({"ok": True, "roles": merged})
+            elif route == "/api/roles/suggest":
+                title = str(data.get("title") or "").strip()
+                if not title:
+                    self._send({"ok": False, "error": "сначала впишите название роли"})
+                else:
+                    try:
+                        text = _model_once(
+                            config.load(),
+                            "Ты помогаешь описать роль в команде ИИ-агентов. Пиши по-русски, "
+                            "одним абзацем на 2-3 предложения, от второго лица («Ты …»). "
+                            "Без списков, без вступлений и без кавычек. Скажи, на что смотрит роль, "
+                            "что делает и что не делает. Не длиннее 45 слов.",
+                            "Роль: " + title,
+                            420,
+                        )
+                        self._send({"ok": bool(text), "text": text,
+                                    "error": "" if text else "модель вернула пустой ответ"})
+                    except Exception as exc:
+                        self._send({"ok": False, "error": str(exc)})
             elif route == "/api/subagents/run":
                 task = str(data.get("task") or "").strip()
                 wanted = [str(item) for item in (data.get("roles") or []) if str(item).strip()]

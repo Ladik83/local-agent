@@ -852,33 +852,181 @@ function poll() {
 }
 
 const THINKING_LABELS = { none: 'без размышлений', low: 'низкий', medium: 'средний', high: 'высокий', xhigh: 'максимальный' };
+const ROLE_TOOLS = {
+  read: ['read_file', 'list_files', 'find', 'grep'],
+  tools: ['read_file', 'list_files', 'find', 'grep', 'run_command']
+};
+const ROLE_TOOLS_LABEL = { all: 'все инструменты', read: 'только чтение', tools: 'чтение и команды', custom: 'свои (как было)' };
+
+function roleList() {
+  const team = STATE.team || {};
+  if (!Array.isArray(team.roles)) team.roles = [];
+  return team.roles;
+}
+
+function roleToolsKey(role) {
+  if (role.tools === 'all' || !role.tools) return 'all';
+  const list = role.tools.slice().sort().join(',');
+  for (const key of Object.keys(ROLE_TOOLS)) {
+    if (ROLE_TOOLS[key].slice().sort().join(',') === list) return key;
+  }
+  return 'custom';
+}
+
+function currentRole() {
+  const roles = roleList();
+  return roles.find(function (role) { return role.id === STATE.roleSel; }) || null;
+}
 
 function renderRoles() {
-  const box = document.getElementById('rolesPanel');
-  if (!box) return;
-  const rows = (STATE.team || {}).roles || [];
-  let html = '<table class="roles"><thead><tr><th>Роль</th><th>Думает</th><th>Что делает</th></tr></thead><tbody>';
-  for (const role of rows) {
-    let opts = '';
-    for (const key of Object.keys(THINKING_LABELS)) {
-      opts += '<option value="' + key + '"' + (role.thinking === key ? ' selected' : '') + '>' + THINKING_LABELS[key] + '</option>';
-    }
-    html += '<tr><td class="roleName">' + esc(role.title) + '</td>' +
-      '<td><select data-role-thinking="' + role.id + '">' + opts + '</select></td>' +
-      '<td><input type="text" data-role-prompt="' + role.id + '" value="' + esc(role.prompt).replace(/"/g, '&quot;') + '"></td></tr>';
+  const list = document.getElementById('roleList');
+  const editor = document.getElementById('roleEditor');
+  const count = document.getElementById('rolesCount');
+  if (!list || !editor) return;
+  const roles = roleList();
+  if (count) count.textContent = roles.length ? roles.length + ' шт.' : '';
+  if (!roles.length) {
+    list.innerHTML = '<div class="sub" style="padding:8px">Ролей нет</div>';
+    editor.innerHTML = '<div class="sub">Добавьте роль кнопкой «+ Добавить роль».</div>';
+    return;
   }
-  html += '</tbody></table>';
-  box.innerHTML = html;
+  let sel = roles.findIndex(function (role) { return role.id === STATE.roleSel; });
+  if (sel < 0) sel = 0;
+  STATE.roleSel = roles[sel].id;
+  list.innerHTML = roles.map(function (role, index) {
+    return '<button class="roleItem' + (index === sel ? ' sel' : '') + '" data-role="' + esc(role.id) + '">' +
+      '<b>' + esc(role.title || role.id) + '</b>' +
+      '<span class="roleBadge">' + esc(THINKING_LABELS[role.thinking] || '') + '</span></button>';
+  }).join('');
+  Array.prototype.forEach.call(list.querySelectorAll('[data-role]'), function (btn) {
+    btn.addEventListener('click', function () {
+      STATE.roleSel = btn.getAttribute('data-role');
+      renderRoles();
+    });
+  });
+  renderRoleEditor(roles[sel]);
   applyMode((STATE.team || {}).enabled);
 }
 
-async function saveRoles() {
-  const rows = ((STATE.team || {}).roles || []).map(function (role) {
-    const think = document.querySelector('[data-role-thinking="' + role.id + '"]');
-    const prompt = document.querySelector('[data-role-prompt="' + role.id + '"]');
-    return { id: role.id, title: role.title, thinking: think ? think.value : role.thinking, tools: role.tools, prompt: prompt ? prompt.value : role.prompt };
+function renderRoleEditor(role) {
+  const editor = document.getElementById('roleEditor');
+  if (!editor || !role) return;
+  const thinkOpts = Object.keys(THINKING_LABELS).map(function (key) {
+    return '<option value="' + key + '"' + (role.thinking === key ? ' selected' : '') + '>' + THINKING_LABELS[key] + '</option>';
+  }).join('');
+  const toolsKey = roleToolsKey(role);
+  const toolOpts = Object.keys(ROLE_TOOLS_LABEL).filter(function (key) {
+    return key !== 'custom' || toolsKey === 'custom';
+  }).map(function (key) {
+    return '<option value="' + key + '"' + (toolsKey === key ? ' selected' : '') + '>' + ROLE_TOOLS_LABEL[key] + '</option>';
+  }).join('');
+  editor.innerHTML =
+    '<div class="teamRow"><label style="flex:1 1 240px">Название<input type="text" id="roleTitle" value="' + esc(role.title || '').replace(/"/g, '&quot;') + '"></label>' +
+    '<label>Думает<select id="roleThinking">' + thinkOpts + '</select></label>' +
+    '<label>Инструменты<select id="roleTools">' + toolOpts + '</select></label></div>' +
+    '<label>Что делает<textarea id="rolePrompt" placeholder="Опишите роль: на что смотрит, что делает, чего не делает">' + esc(role.prompt || '') + '</textarea></label>' +
+    '<div class="teamRow"><button class="ghost" id="roleSuggest" title="Попросить загруженную модель написать описание по названию">Придумать описание</button>' +
+    '<span class="teamHint">по названию роли — модель предложит текст, его можно поправить</span>' +
+    '<span style="flex:1"></span>' +
+    '<button class="ghost" id="roleDelete" title="Убрать роль из команды">Удалить роль</button></div>';
+
+  const title = document.getElementById('roleTitle');
+  const thinking = document.getElementById('roleThinking');
+  const toolsSel = document.getElementById('roleTools');
+  const prompt = document.getElementById('rolePrompt');
+  title.addEventListener('input', function () {
+    role.title = title.value;
+    const item = document.querySelector('[data-role="' + role.id + '"] b');
+    if (item) item.textContent = role.title || role.id;
   });
-  await fetch('/api/roles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ roles: rows }) });
+  title.addEventListener('change', renderRoles);
+  thinking.addEventListener('change', function () { role.thinking = thinking.value; renderRoles(); });
+  toolsSel.addEventListener('change', function () {
+    if (toolsSel.value === 'all') role.tools = 'all';
+    else if (toolsSel.value !== 'custom') role.tools = ROLE_TOOLS[toolsSel.value].slice();
+  });
+  prompt.addEventListener('input', function () { role.prompt = prompt.value; });
+  document.getElementById('roleSuggest').addEventListener('click', suggestRolePrompt);
+  document.getElementById('roleDelete').addEventListener('click', deleteRole);
+}
+
+function addRole() {
+  const roles = roleList();
+  const id = 'role-' + Date.now().toString(36);
+  roles.push({ id: id, title: 'Новая роль', thinking: 'medium', tools: 'all', prompt: '' });
+  STATE.roleSel = id;
+  renderRoles();
+  const input = document.getElementById('roleTitle');
+  if (input) { input.focus(); input.select(); }
+}
+
+function deleteRole() {
+  const role = currentRole();
+  if (!role) return;
+  const roles = roleList();
+  const index = roles.findIndex(function (item) { return item.id === role.id; });
+  if (index < 0) return;
+  roles.splice(index, 1);
+  STATE.rolesRemoved = (STATE.rolesRemoved || []).concat([role.id]);
+  STATE.roleSel = roles.length ? roles[Math.min(index, roles.length - 1)].id : '';
+  renderRoles();
+  toast('Роль убрана — нажмите «Сохранить роли», чтобы запомнить');
+}
+
+async function suggestRolePrompt() {
+  const role = currentRole();
+  const button = document.getElementById('roleSuggest');
+  const field = document.getElementById('roleTitle');
+  if (!role || !button) return;
+  const title = ((field && field.value) || role.title || '').trim();
+  if (!title) { toast('Сначала впишите название роли'); return; }
+  const was = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Думаю…';
+  try {
+    const response = await fetch('/api/roles/suggest', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: title })
+    });
+    const data = await response.json();
+    if (!data.ok) { toast(data.error || 'Модель не ответила'); return; }
+    role.prompt = data.text;
+    const area = document.getElementById('rolePrompt');
+    if (area) area.value = data.text;
+    toast('Описание готово — поправьте под себя');
+  } catch (error) {
+    toast('Не удалось получить описание');
+  } finally {
+    button.disabled = false;
+    button.textContent = was;
+  }
+}
+
+async function resetRoles() {
+  if (!window.confirm('Вернуть стандартные роли и убрать все правки?')) return;
+  const response = await fetch('/api/roles', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roles: [], removed: [] })
+  });
+  const data = await response.json();
+  if (!data.ok) { toast(data.error || 'Не получилось'); return; }
+  STATE.rolesRemoved = [];
+  STATE.roleSel = '';
+  toast('Стандартные роли вернулись');
+  await loadState();
+}
+
+async function saveRoles() {
+  const roles = roleList().map(function (role) {
+    return { id: role.id, title: role.title, thinking: role.thinking, tools: role.tools, prompt: role.prompt };
+  });
+  const response = await fetch('/api/roles', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ roles: roles, removed: STATE.rolesRemoved || [] })
+  });
+  const data = await response.json();
+  if (!data.ok) { toast(data.error || 'Не сохранилось'); return; }
+  STATE.rolesRemoved = [];
   toast('Роли сохранены');
   await loadState();
 }
@@ -3173,6 +3321,8 @@ window.addEventListener('keydown', function (event) {
 document.getElementById('send').addEventListener('click', send);
 document.getElementById('discoverBtn').addEventListener('click', discoverModels);
 document.getElementById('saveRoles').addEventListener('click', saveRoles);
+document.getElementById('addRole').addEventListener('click', addRole);
+document.getElementById('resetRoles').addEventListener('click', resetRoles);
 document.getElementById('helpBtn').addEventListener('click', function () {
   document.getElementById('helpModal').classList.add('show');
 });
