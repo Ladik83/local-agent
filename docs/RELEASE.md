@@ -115,6 +115,35 @@ python make_manifest.py --zip release\LocalAgent-0.7.0.zip --version 0.7.0 --url
 `data/backup/app-<версия>.zip` и подменит папку `app`. Если файлы заняты —
 обновление применится после перезапуска (`data/pending_update.json`).
 
+## Выкладка на GitHub (так сделано для 0.7.0)
+
+Репозиторий: `Ladik83/local-agent`, релиз `v0.7.0`. Файлы раздаются как assets релиза — они доступны без авторизации, поэтому автообновление работает.
+
+```
+# 1. собрать и подписать манифест с ПОЛНОЙ ссылкой на asset
+python build_portable.py --clean
+powershell -NoProfile -Command "Compress-Archive -Path 'dist\LocalAgent\*' -DestinationPath 'release\LocalAgent-0.7.0.zip' -Force"
+python make_manifest.py --zip release/LocalAgent-0.7.0.zip --version 0.7.0 ^
+  --url https://github.com/Ladik83/local-agent/releases/download/v0.7.0/LocalAgent-0.7.0.zip ^
+  --notes "что нового" --out release/manifest.json --sign
+
+# 2. выложить релиз с двумя файлами
+gh release create v0.7.0 release/LocalAgent-0.7.0.zip release/manifest.json --title "LocalAgent 0.7.0" --notes "что нового"
+```
+
+Адрес манифеста для настроек:
+
+```
+https://github.com/Ladik83/local-agent/releases/download/v0.7.0/manifest.json
+```
+
+Особенности:
+
+- ссылка в манифесте должна быть **полной** (release asset), относительная тоже работает, но только когда манифест лежит рядом с zip на одном хосте;
+- при выпуске новой версии меняются и тег, и оба адреса — старый манифест остаётся валидным для тех, кто ещё на прошлой версии;
+- ассеты GitHub отдают 302 на `objects.githubusercontent.com`, приложение это переживает (редирект разрешён);
+- если zip пересобран — пересобрать и манифест (sha256 изменится), и пересоздать релиз (`gh release delete-asset` / `gh release upload --clobber`).
+
 ## Чек-лист выпуска
 
 - [ ] Версия в `VERSION` поднята и совпадает с `--version` в манифесте.
