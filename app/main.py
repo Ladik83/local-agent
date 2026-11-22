@@ -826,6 +826,10 @@ class Handler(BaseHTTPRequestHandler):
                 if not DISC.get("active"):
                     threading.Thread(target=_discover, daemon=True).start()
                 self._send({"ok": True})
+            elif route == "/api/engine/strays":
+                self._send({"ok": True, "pids": engine.list_strays()})
+            elif route == "/api/engine/reap":
+                self._send(engine.reap_strays())
             elif route == "/api/engine/check":
                 self._send(engine.check_latest(force=True))
             elif route == "/api/engine/install":

@@ -39,6 +39,10 @@ check("кнопка установки", 'id="updateApply"' in html and 'functio
 check("маршрут проверки приложения", '/api/update/check' in main_py)
 check("адрес сохраняется", "update_url" in app_js and "update_url" in config.DEFAULTS)
 
+check("поиск лишних серверов", hasattr(engine, "list_strays") and hasattr(engine, "reap_strays"))
+check("маршрут остановки лишних", '/api/engine/strays' in main_py and '/api/engine/reap' in main_py)
+check("кнопка в интерфейсе", 'id="engineReap"' in app_js)
+
 result = engine.check_latest(force=True)
 if result.get("ok"):
     print("     установлено:", result.get("tag") or "не задано", "| последняя:", result.get("latest"))

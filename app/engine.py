@@ -261,6 +261,60 @@ def _healthy(port: int, timeout: float) -> bool:
     return False
 
 
+def list_strays() -> list:
+    """Наши лишние llama-server: слушают 8090–8400, но не текущий чат и не эмбеддинги."""
+    import subprocess as sp
+    try:
+        text = sp.run(["netstat", "-ano"], capture_output=True, timeout=15).stdout.decode("cp866", "replace")
+    except (OSError, sp.SubprocessError) as exc:
+        diag.warn("engine.py:strays", exc)
+        return []
+    known = set()
+    for container in (SERVER, EMBED):
+        proc = container.get("proc")
+        if proc is not None and proc.poll() is None:
+            known.add(int(proc.pid))
+    pids = []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 5 or "LISTENING" not in parts:
+            continue
+        address = parts[1]
+        port = 0
+        try:
+            port = int(address.rsplit(":", 1)[1])
+        except (IndexError, ValueError):
+            continue
+        if not 8090 <= port <= 8400:
+            continue
+        try:
+            pid = int(parts[-1])
+        except ValueError:
+            continue
+        if pid in known or pid in pids:
+            continue
+        pids.append(pid)
+    return pids
+
+
+def reap_strays() -> dict:
+    """Остановить лишние серверы моделей (после тестов и падений)."""
+    stopped = []
+    for pid in list_strays():
+        class _P:
+            pass
+        holder = _P()
+        holder.pid = pid
+        if memory_mb(holder) > 3000:  # чужую большую модель не трогаем
+            continue
+        try:
+            os.kill(pid, 9)
+            stopped.append(pid)
+        except OSError as exc:
+            diag.warn("engine.py:reap_strays", exc)
+    return {"ok": True, "stopped": stopped, "count": len(stopped)}
+
+
 def find_projector(model_path) -> str:
     """Проектор зрения к модели: mmproj*.gguf в той же папке (или пусто)."""
     path = pathlib.Path(str(model_path or ""))
@@ -350,11 +404,41 @@ def memory_mb(proc) -> int:
 
 EMBED = {"proc": None, "port": None, "model": None, "error": None, "started": 0.0}
 EMBED_PID = config.DATA_DIR / "embed.pid"
+EMBED_PIDS = config.DATA_DIR / "embed.pids.json"  # все серверы эмбеддингов, что мы запускали
+
+
+def _embed_pids_read() -> list:
+    try:
+        return [int(item) for item in json.loads(EMBED_PIDS.read_text(encoding="utf-8"))]
+    except (OSError, ValueError, TypeError):
+        return []
+
+
+def _embed_pids_write(pids) -> None:
+    try:
+        EMBED_PIDS.write_text(json.dumps(sorted({int(pid) for pid in pids})), encoding="utf-8")
+    except OSError as exc:
+        diag.warn("engine.py:embed_pids", exc)
+
+
+def embed_reap() -> None:
+    """Погасить серверы эмбеддингов, оставшиеся от предыдущих запусков."""
+    left = []
+    for pid in _embed_pids_read():
+        try:
+            os.kill(pid, 9)
+            left.append(pid)
+        except OSError:
+            continue
+    if left:
+        diag.warn("engine.py:embed_reap", left)
+    _embed_pids_write([])
 
 
 def _embed_pid_write(pid) -> None:
     try:
         EMBED_PID.write_text(str(pid), encoding="utf-8")
+        _embed_pids_write(_embed_pids_read() + [pid])
     except OSError as exc:
         diag.warn("engine.py:embed_pid", exc)
 
@@ -428,6 +512,7 @@ def start_embed(model_path: str) -> dict:
         return {"ok": False, "error": "движок llama.cpp не установлен"}
     embed_stop()
     embed_cleanup()  # и сервер от прошлого запуска приложения
+    embed_reap()     # и все, что остались от тестов и перезапусков
     port = free_port(8190)
     log_path = config.LOGS_DIR / "llama-embed.log"
     cmd = [exe, "-m", path, "--host", "127.0.0.1", "--port", str(port),

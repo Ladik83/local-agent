@@ -159,6 +159,20 @@ function renderCatalog() {
   }).join('');
 }
 
+async function reapEngine() {
+  try {
+    const found = await (await fetch('/api/engine/strays')).json();
+    const count = (found.pids || []).length;
+    if (!count) { toast('Лишних серверов нет'); return; }
+    if (!confirm('Нашёл лишних серверов: ' + count + '. Остановить их?')) return;
+    const data = await postJson('/api/engine/reap', {});
+    toast('Остановлено: ' + (data.count || 0));
+    await loadState();
+  } catch (error) {
+    toast('Не удалось: ' + error.message);
+  }
+}
+
 async function checkEngineUpdate() {
   toast('Смотрю последнюю сборку llama.cpp…');
   try {
@@ -287,6 +301,9 @@ function renderSettings() {
   html += '<div class="row"><span>Проверить обновление' +
     tip('Сверяет установленную сборку llama.cpp с последней на GitHub. Проверка идёт через интернет и занимает пару секунд.') +
     '</span><span><button class="ghost" id="engineCheck">Проверить сейчас</button></span></div>';
+  html += '<div class="row"><span>Забытые серверы моделей' +
+    tip('После тестов и падений могут остаться лишние llama-server: они держат память. Кнопка находит процессы на портах 8090–8400, которые не являются текущей моделью, и останавливает их. Большие модели (свыше 3 ГБ) не трогает.') +
+    '</span><span><button class="ghost" id="engineReap">Найти и остановить</button></span></div>';
   html += '<div class="row"><span>Проверять при запуске' +
     tip('Раз в сутки при старте приложения сверять версию движка с GitHub и показывать, если вышла новая сборка.') +
     '</span><input type="checkbox" id="autoUpdateEngine"></div>';
@@ -302,6 +319,8 @@ function renderSettings() {
   if (checkBtn) checkBtn.addEventListener('click', checkEngineUpdate);
   const updateBtn = document.getElementById('engineUpdate');
   if (updateBtn) updateBtn.addEventListener('click', function () { installEngine(e.variant || 'vulkan'); });
+  const reapBtn = document.getElementById('engineReap');
+  if (reapBtn) reapBtn.addEventListener('click', reapEngine);
   const autoBox = document.getElementById('autoUpdateEngine');
   if (autoBox) {
     autoBox.checked = !!s.auto_update_engine;
