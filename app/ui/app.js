@@ -587,6 +587,10 @@ async function send() {
       chip(event.text || '');
       return;
     }
+    if (event.type === 'plan_steps') {
+      renderPlan(event.plan);
+      return;
+    }
     if (event.type === 'plan_start' || event.type === 'summary_start') {
       answer = '';
       thinking = '';
@@ -967,6 +971,88 @@ function toolsFailure() {
   const info = TOOLS_INFO || {};
   if (!info.failed) return '';
   return 'Не удалось получить каталог (' + esc(info.failed) + '). Похоже, приложение запущено со старой версией сервера — закройте и запустите его снова.';
+}
+
+let SKILLS_INFO = { items: [], dir: "" };
+let CURRENT_PLAN = { steps: [], total: 0, done: 0 };
+
+const PLAN_MARKS = { todo: '○', doing: '◐', done: '●', skip: '×' };
+
+function renderPlan(plan) {
+  const box = document.getElementById('planBox');
+  if (!box) return;
+  CURRENT_PLAN = plan || { steps: [] };
+  const steps = (CURRENT_PLAN && CURRENT_PLAN.steps) || [];
+  if (!steps.length) {
+    box.hidden = true;
+    box.innerHTML = '';
+    return;
+  }
+  box.hidden = false;
+  let html = '<div class="planTitle">' + esc(CURRENT_PLAN.title || 'План задачи') + '</div>';
+  steps.forEach(function (step, index) {
+    const status = step.status || 'todo';
+    html += '<div class="planStep ' + status + '"><span class="mark">' + PLAN_MARKS[status] + '</span>' +
+      '<span>' + (index + 1) + '. ' + esc(step.text || '') + '</span></div>';
+  });
+  const total = CURRENT_PLAN.total || steps.length;
+  const done = CURRENT_PLAN.done || 0;
+  html += '<div class="planProgress">Выполнено ' + done + ' из ' + total + '</div>';
+  box.innerHTML = html;
+}
+
+async function loadPlan() {
+  try {
+    const data = await (await fetch('/api/plan')).json();
+    renderPlan(data.plan);
+  } catch (error) {
+    renderPlan(null);
+  }
+}
+
+async function loadSkills() {
+  try {
+    SKILLS_INFO = await (await fetch('/api/skills')).json();
+  } catch (error) {
+    SKILLS_INFO = { items: [], dir: '' };
+  }
+  return SKILLS_INFO;
+}
+
+function renderSkills() {
+  const box = document.getElementById('skillsList');
+  const dir = document.getElementById('skillsDir');
+  if (dir) dir.textContent = SKILLS_INFO.dir || '—';
+  if (!box) return;
+  const items = SKILLS_INFO.items || [];
+  if (!items.length) {
+    box.innerHTML = '<div class="sub">Навыков пока нет — нажмите «Добавить встроенные».</div>';
+    return;
+  }
+  box.innerHTML = items.map(function (item) {
+    return '<div class="skillRow"><b>' + esc(item.title) + '</b>' +
+      '<span class="sub">Когда: ' + esc(item.when || '—') + '</span></div>';
+  }).join('');
+}
+
+async function refreshSkills() {
+  await loadSkills();
+  renderSkills();
+}
+
+async function seedSkills() {
+  const data = await postJson('/api/skills/seed', {});
+  toast(data.added ? ('Добавлено навыков: ' + data.added) : 'Навыки уже на месте');
+  await refreshSkills();
+}
+
+function wireSkills() {
+  const seed = document.getElementById('skillsSeed');
+  const refresh = document.getElementById('skillsRefresh');
+  if (seed) seed.addEventListener('click', seedSkills);
+  if (refresh) refresh.addEventListener('click', refreshSkills);
+  loadSkills().then(renderSkills);
+  loadPlan();
 }
 
 function renderTools() {
@@ -2723,7 +2809,7 @@ document.querySelectorAll('.tab').forEach(function (button) {
     if (button.dataset.tab === 'kb') loadKB();
     if (button.dataset.tab === 'tasks') loadTasks();
     if (button.dataset.tab === 'settings') { loadLan(); loadTelegram(); }
-    if (button.dataset.tab === 'tools') { loadTools().then(renderTools); }
+    if (button.dataset.tab === 'tools') { loadTools().then(renderTools); refreshSkills(); }
   });
 });
 
@@ -3004,6 +3090,7 @@ bootStep('rolesBlock', wireRolesBlock);
 bootStep('drawerHead', wireDrawerHead);
 bootStep('vision', wireVision);
 bootStep('appUpdate', wireAppUpdate);
+bootStep('skills', wireSkills);
 bootStep('tools', function () { wireTools(); return loadTools().then(renderTools); });
 bootStep('layout', wireLayout);
 bootStep('drop', wireDrop);

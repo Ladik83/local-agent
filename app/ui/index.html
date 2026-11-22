@@ -52,6 +52,7 @@
    </aside>
    <div class="colResizer railResizer" data-resize="left" title="Левая панель"></div>
    <div class="chatCenter">
+ <div class="planBox" id="planBox" hidden></div>
  <div id="messages" class="messages"></div>
  <div class="templates" id="templates" title="Готовые формулировки задачи">
  <button class="chip" data-template="audit">Проверить папку</button>
@@ -227,6 +228,12 @@
   <div class="sub" id="mcpEnv"></div>
   <div id="mcpCatalog"></div>
  </div>
+ </div>
+ <div class="panel">
+  <h4>Навыки агента</h4>
+  <div class="sub">Короткие проверенные инструкции под типовые задачи. Агент сам подбирает 1–2 навыка по тексту задачи и получает их отдельным правилом. Файлы: <span id="skillsDir">—</span></div>
+  <div id="skillsList"></div>
+  <div class="row"><span></span><span><button class="ghost" id="skillsSeed">Добавить встроенные</button> <button class="ghost" id="skillsRefresh">Обновить</button></span></div>
  </div>
  <div class="panel">
   <h4>Подключённые серверы</h4>

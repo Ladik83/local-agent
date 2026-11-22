@@ -37,13 +37,22 @@ SCHEMAS = [
      "parameters": {"type": "object", "properties": {"pattern": {"type": "string", "description": "Маска имени"}, "path": {"type": "string", "description": "Где искать"}}, "required": ["pattern"]}},
     {"name": "grep", "description": "Найти строки по тексту или регулярному выражению в файлах папки.",
      "parameters": {"type": "object", "properties": {"pattern": {"type": "string", "description": "Текст или regex"}, "path": {"type": "string", "description": "Где искать"}, "glob": {"type": "string", "description": "Маска файлов, по умолчанию все"}}, "required": ["pattern"]}},
+    {"name": "todo_write", "description": "Записать план задачи: список шагов и что уже сделано.",
+     "parameters": {"type": "object", "properties": {
+         "title": {"type": "string", "description": "Короткое название задачи"},
+         "steps": {"type": "array", "items": {"type": "string"}, "description": "Шаги по порядку"},
+         "done": {"type": "array", "items": {"type": "integer"}, "description": "Номера выполненных шагов (с 1)"},
+         "current": {"type": "integer", "description": "Номер шага, который делается сейчас (с 1)"}},
+      "required": ["steps"]}},
+    {"name": "verify_project", "description": "Проверить проект: тесты, сборка или проверка синтаксиса — и вернуть результат.",
+     "parameters": {"type": "object", "properties": {"path": {"type": "string", "description": "Папка проекта (по умолчанию текущая)"}}}},
     {"name": "search_docs", "description": "Найти ответ в базе знаний (проиндексированные папки и документы) с указанием источника.",
      "parameters": {"type": "object", "properties": {"query": {"type": "string", "description": "Что искать"},
                                                         "limit": {"type": "integer", "description": "Сколько фрагментов вернуть"}},
                     "required": ["query"]}},
 ]
 
-READ_ONLY = {"list_files", "read_file", "fetch_url", "now", "calc", "find", "grep", "search_docs"}
+READ_ONLY = {"list_files", "read_file", "fetch_url", "now", "calc", "find", "grep", "search_docs", "todo_write"}
 
 META = {
     "list_files": {"title": "Список файлов", "danger": "чтение",
@@ -76,6 +85,12 @@ META = {
     "grep": {"title": "Поиск по тексту файлов", "danger": "чтение",
              "about": "Найти строки по тексту или регулярному выражению во всех файлах папки.",
              "tags": ("найди в файлах", "поиск по тексту", "упомина", "встреча", "regex", "где используется", "найди в коде")},
+    "todo_write": {"title": "План задачи", "danger": "чтение",
+                   "about": "Записать шаги задачи и отмечать, что уже сделано.",
+                   "tags": ("план", "шаги", "по шагам", "сделай по порядку", "план работ")},
+    "verify_project": {"title": "Проверка проекта", "danger": "команды",
+                       "about": "Запустить тесты, сборку или проверку синтаксиса и вернуть результат.",
+                       "tags": ("проверь", "провери", "тест", "тесты", "сборка", "прогони", "убедись", "сдай")},
     "search_docs": {"title": "База знаний", "danger": "чтение",
                     "about": "Найти ответ в проиндексированных папках и документах, с указанием источника.",
                     "tags": ("база знаний", "в документах", "в знаниях", "по документам", "регламент", "инструкц")},
@@ -154,9 +169,13 @@ def select(task: str, cfg: dict) -> list:
     else:
         return []
     extra = set(sorted(extra, key=lambda name: -sims.get(name, 0.0))[:1])
+    core = {"todo_write"}
+    if cfg.get("allow_shell"):
+        core.add("verify_project")
+    picked = set(picked) | (core & allowed)
     ordered = sorted(picked | extra,
                      key=lambda name: (name not in hits, -sims.get(name, 0.0)))
-    return ordered[:5]
+    return ordered[:6]
 
 
 
@@ -168,6 +187,7 @@ def _allowed(cfg: dict) -> set:
         allowed.add("write_file")
     if cfg.get("allow_shell"):
         allowed.add("run_command")
+        allowed.add("verify_project")
     if cfg.get("allow_web"):
         allowed.add("web_search")
     return allowed - {str(name) for name in (cfg.get("tools_off") or [])}
@@ -448,6 +468,70 @@ HANDLERS = {
     "now": _now, "calc": _calc, "find": _find, "grep": _grep,
     "search_docs": _search_docs,
 }
+
+
+def todo_write(args: dict, cfg: dict) -> str:
+    """План задачи: агент сам ведёт список шагов."""
+    from . import plan
+    steps = args.get("steps") or []
+    done = {int(item) for item in (args.get("done") or []) if str(item).isdigit() or isinstance(item, int)}
+    current = int(args.get("current") or 0)
+    prepared = []
+    for number, text in enumerate(steps, 1):
+        status = "done" if number in done else ("doing" if number == current else "todo")
+        prepared.append({"text": str(text), "status": status})
+    data = plan.set_plan(args.get("title") or "", prepared)
+    return "План сохранён: %d шагов, выполнено %d." % (data["total"], data["done"])
+
+
+def _verify_command(root: pathlib.Path) -> list:
+    """Подобрать проверку под проект: тесты, сборка или проверка синтаксиса."""
+    package = root / "package.json"
+    if package.exists():
+        try:
+            data = json.loads(package.read_text(encoding="utf-8"))
+            if (data.get("scripts") or {}).get("test"):
+                return ["npm", "test", "--silent"]
+        except (OSError, ValueError):
+            pass
+    makefile = root / "Makefile"
+    if makefile.exists():
+        try:
+            if "test:" in makefile.read_text(encoding="utf-8", errors="replace"):
+                return ["make", "test"]
+        except OSError:
+            pass
+    marks = [root / "pytest.ini", root / "tox.ini", root / "pyproject.toml", root / "setup.cfg"]
+    if any(path.exists() for path in marks) or list(root.glob("tests/test_*.py")):
+        return ["python", "-m", "pytest", "-q"]
+    if list(root.glob("tests/check_*.py")):
+        return ["python", "-m", "compileall", "-q", "app"]
+    return ["python", "-m", "compileall", "-q", "."]
+
+
+def verify_project(args: dict, cfg: dict) -> str:
+    """Запустить проверку проекта и вернуть короткий отчёт."""
+    root = pathlib.Path(str(args.get("path") or cfg.get("_project") or pathlib.Path.cwd())).resolve()
+    if not root.is_dir():
+        return "Папка проекта не найдена: %s" % root
+    cmd = _verify_command(root)
+    try:
+        proc = subprocess.run(cmd, cwd=str(root), capture_output=True, timeout=180,
+                              creationflags=NO_WINDOW)
+    except FileNotFoundError:
+        return "Не нашёл команду %s — проверьте, что она установлена." % cmd[0]
+    except subprocess.TimeoutExpired:
+        return "Проверка не уложилась в 180 секунд: %s" % " ".join(cmd)
+    except OSError as exc:
+        return "Не удалось запустить проверку: %s" % exc
+    output = ((proc.stdout or b"") + (proc.stderr or b"")).decode("utf-8", "replace").strip()
+    if len(output) > 3000:
+        output = output[:1500] + chr(10) + "…" + chr(10) + output[-1500:]
+    head = "Проверка: %s — код %d" % (" ".join(cmd), proc.returncode)
+    return head + (chr(10) + output if output else chr(10) + "(вывод пустой)")
+
+
+HANDLERS.update({"todo_write": todo_write, "verify_project": verify_project})
 
 
 def call(name: str, args: dict, cfg: dict) -> str:

@@ -71,8 +71,13 @@ def _with_images(messages: list) -> list:
 
 
 def _call(convo: list, cfg: dict, emit, target: dict, allow_tools: bool = True):
+    system = [{"role": "system", "content": cfg["system_prompt"]}]
+    if cfg.get("_skills_text"):
+        system.append({"role": "system", "content": cfg["_skills_text"]})
+    if cfg.get("_plan_text"):
+        system.append({"role": "system", "content": cfg["_plan_text"]})
     payload = {
-        "messages": [{"role": "system", "content": cfg["system_prompt"]}] + _with_images(list(convo)),
+        "messages": system + _with_images(list(convo)),
         "stream": True,
         "temperature": float(cfg.get("temperature") or 0.7),
         "tool_choice": "auto",
@@ -144,7 +149,9 @@ def _call(convo: list, cfg: dict, emit, target: dict, allow_tools: bool = True):
 def chat_plain(convo: list, cfg: dict, emit, target: dict) -> list:
     """Один ответ без инструментов — для моделей зрения и простых задач."""
     convo = list(convo)
-    cfg = _prepare_tools(cfg, _last_user_text(convo), emit)
+    task_text = _last_user_text(convo)
+    cfg = _prepare_tools(cfg, task_text, emit)
+    cfg = _prepare_context(cfg, task_text, emit)
     text, _calls = _call(convo, cfg, emit, target, allow_tools=False)
     convo.append({"role": "assistant", "content": text})
     emit({"type": "done", "messages": _clean(convo)})
@@ -159,6 +166,27 @@ def _last_user_text(convo: list) -> str:
                 return " ".join(str(part.get("text") or "") for part in content if isinstance(part, dict))
             return str(content or "")
     return ""
+
+
+def _prepare_context(cfg: dict, task: str, emit) -> dict:
+    """Добавить к запросу подходящие навыки и текущий план задачи."""
+    cfg = dict(cfg)
+    try:
+        from . import skills as skills_mod
+        picked = skills_mod.select(task, 2)
+        if picked:
+            cfg["_skills_text"] = skills_mod.context(task, 2)
+            emit({"type": "note", "text": "Навыки: " + ", ".join(item["title"] for item in picked)})
+    except Exception as exc:
+        diag.warn("agent.py:skills", exc)
+    try:
+        from . import plan as plan_mod
+        text = plan_mod.as_text()
+        if text:
+            cfg["_plan_text"] = text
+    except Exception as exc:
+        diag.warn("agent.py:plan", exc)
+    return cfg
 
 
 def _prepare_tools(cfg: dict, task: str, emit) -> dict:
@@ -180,7 +208,9 @@ def _prepare_tools(cfg: dict, task: str, emit) -> dict:
 def chat(convo: list, cfg: dict, emit, target: dict = None) -> list:
     """Полный цикл: ответ, инструменты, ответ. emit получает события для UI."""
     convo = _compact(list(convo), cfg, emit, target)
-    cfg = _prepare_tools(cfg, _last_user_text(convo), emit)
+    task_text = _last_user_text(convo)
+    cfg = _prepare_tools(cfg, task_text, emit)
+    cfg = _prepare_context(cfg, task_text, emit)
     for _step in range(MAX_STEPS):
         if STOP["flag"]:
             emit({"type": "cancelled", "text": "Остановлено пользователем"})
@@ -204,6 +234,12 @@ def chat(convo: list, cfg: dict, emit, target: dict = None) -> list:
                 result = "Пользователь не разрешил этот вызов — сделай иначе или спроси."
             stats.mark(tool="", phase="ответ")
             emit({"type": "tool_result", "name": name, "text": result[:800]})
+            if name == "todo_write":
+                try:
+                    from . import plan as plan_mod
+                    emit({"type": "plan_steps", "plan": plan_mod.snapshot()})
+                except Exception as exc:
+                    diag.warn("agent.py:plan_event", exc)
             convo.append({"role": "tool", "tool_call_id": item["id"], "content": result})
         convo = _compact(convo, cfg, emit, target)
     emit({"type": "done", "messages": _clean(convo)})

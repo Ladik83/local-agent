@@ -25,7 +25,7 @@ cfg.update({"tools_auto": True, "allow_write": True, "allow_shell": True, "allow
             "tools_off": [], "mcp": []})
 
 catalog = tools.catalog()
-check("каталог встроенных", len(catalog) == len(tools.SCHEMAS) == 11, "записей: %d" % len(catalog))
+check("каталог встроенных", len(catalog) == len(tools.SCHEMAS) >= 13, "записей: %d" % len(catalog))
 check("у каждого описание и теги", all(item["about"] and item["tags"] for item in catalog))
 check("опасные помечены", any(item["danger"] == "запись" for item in catalog))
 
@@ -45,7 +45,8 @@ for task, expected in cases.items():
     check("выбор: " + task[:38], expected <= picked, "-> " + ", ".join(sorted(picked)))
 
 check("болтовня без инструментов", tools.select("привет, как дела?", cfg) == [])
-check("разбор задачи без инструментов", tools.select("проанализируй архитектуру проекта и предложи план", cfg) == [])
+check("разбор задачи без рабочих инструментов",
+      not (set(tools.select("проанализируй архитектуру проекта и предложи план", cfg)) & {"read_file", "grep", "web_search", "run_command"}))
 
 off = dict(cfg)
 off["tools_off"] = ["calc"]
@@ -56,7 +57,7 @@ auto_cfg = dict(cfg)
 events = []
 prepared = agent._prepare_tools(auto_cfg, "прочитай файл README.md", events.append)
 check("пометка в чате", bool(events) and "Инструменты под задачу" in events[0]["text"], events[0]["text"] if events else "")
-check("ограничение набора", prepared.get("_only_tools") == ["read_file"], str(prepared.get("_only_tools")))
+check("ограничение набора", set(prepared.get("_only_tools") or []) == {"read_file", "todo_write", "verify_project"}, str(prepared.get("_only_tools")))
 
 manual = agent._prepare_tools(dict(cfg, tools_auto=False), "прочитай файл", events.append)
 check("без авто ничего не сужаем", "_only_tools" not in manual)

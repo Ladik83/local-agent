@@ -15,7 +15,7 @@ import urllib.request
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import agent, attach, autostart, catalog, chats as chats_mod, hf, schedule, chats, config, drives, embed, engine, hardware, keystore, mcp, orchestrator, panels, providers, rag, roles, scan, stats, tools, updater, vision, voice
+from . import agent, attach, autostart, catalog, chats as chats_mod, hf, schedule, chats, config, drives, embed, engine, hardware, keystore, mcp, orchestrator, panels, plan, providers, rag, roles, scan, skills, stats, tools, updater, vision, voice
 
 UI_DIR = pathlib.Path(__file__).parent / "ui"
 TOKEN_FILE = config.DATA_DIR / "access.token"
@@ -162,6 +162,8 @@ def state() -> dict:
         "chats": chats.list_all(),
         "engine": engine.status(),
         "engine_check": dict(engine.STARTUP),
+        "plan": plan.snapshot(),
+        "skills": skills.overview(),
         "models": local,
         "pick": pick,
         "catalog": [dict(c, url=catalog.url(c)) for c in catalog.CATALOG],
@@ -434,6 +436,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(chats.load((query.get("id") or [""])[0]))
             elif route == "/api/job":
                 self._send({"engine": dict(engine.JOB), "download": dict(DL), "discover": dict(DISC)})
+            elif route == "/api/skills":
+                self._send({"ok": True, **skills.overview()})
+            elif route == "/api/plan":
+                self._send({"ok": True, "plan": plan.snapshot()})
             elif route == "/api/vision/models":
                 cfg = config.load()
                 self._send({"ok": True, "items": vision.candidates(cfg), "pick": vision.pick(cfg),
@@ -597,6 +603,16 @@ class Handler(BaseHTTPRequestHandler):
                 self._send({"ok": True})
             elif route == "/api/model/download":
                 self._send(start_download(data.get("id", "")))
+            elif route == "/api/skills/seed":
+                count = skills.seed()
+                self._send({"ok": True, "added": count, **skills.overview()})
+            elif route == "/api/skills/save":
+                saved = skills.save(str(data.get("name") or ""), str(data.get("text") or ""))
+                self._send(saved)
+            elif route == "/api/skills/delete":
+                self._send(skills.delete(str(data.get("name") or "")))
+            elif route == "/api/plan/reset":
+                self._send({"ok": True, "plan": plan.reset()})
             elif route == "/api/tools/toggle":
                 name = str(data.get("name") or "").strip()
                 if not name:
@@ -933,6 +949,12 @@ def run(port: int = 7867, open_browser: bool = True):
         vision.cleanup()
     except Exception as exc:
         diag.warn("main.py:vision_cleanup", exc)
+    try:
+        added = skills.seed()
+        if added:
+            print("навыки: добавлено встроенных %d" % added, flush=True)
+    except Exception as exc:
+        diag.warn("main.py:skills_seed", exc)
     if config.load().get("auto_update_engine"):
         threading.Thread(target=lambda: engine.check_latest(force=True), daemon=True).start()
     url = "http://" + HOST + ":%d/" % port
