@@ -372,10 +372,12 @@ button.wide { width: 100%; text-align: center; margin-bottom: 4px; }
 .sbItem b { color: var(--text); font-weight: 600; }
 .sbRight { margin-left: auto; color: var(--muted); }
 .drawer {
-  display: none; border-top: 1px solid var(--line); background: var(--panel);
-  height: var(--drawer-h); max-height: 70vh; overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column; border-top: 1px solid var(--line);
+  background: var(--panel); height: auto; max-height: 70vh;
   position: relative; flex: none; overflow: hidden;
 }
+.drawer.open { height: var(--drawer-h); }
+.drawer:not(.open) .drawerGrid, .drawer:not(.open) .drawerResize { display: none; }
 .drawerResize {
   height: 10px; cursor: row-resize; background: transparent; position: relative; flex: none;
 }
@@ -384,7 +386,7 @@ button.wide { width: 100%; text-align: center; margin-bottom: 4px; }
   width: 46px; height: 4px; border-radius: 99px; background: var(--line);
 }
 .drawerResize:hover::before { background: var(--accent); }
-.drawer.open { display: flex; flex-direction: column; }
+
 .drawerGrid { display: flex; gap: 0; align-items: stretch; padding: 12px 18px 16px; flex: 1 1 auto; min-height: 0; }
 .drawerCol { min-width: 0; }
 .drawerCol h4 {
@@ -724,3 +726,25 @@ body.hugeFont { --fs: 19px; }
 .toolRow { padding: 5px 0; }
 .toolRow .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 1200px) { .toolsCols { flex-direction: column; } }
+
+/* ---------- свёрнутая полоса панелей ---------- */
+.drawerHead {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  cursor: pointer; font-size: 12.5px; color: var(--muted); flex: none;
+  border-bottom: 1px solid transparent; user-select: none;
+}
+.drawerHead:hover { background: var(--panel2); }
+.drawer.open .drawerHead { border-bottom-color: var(--line); }
+.drawerName { color: var(--text); font-weight: 600; }
+.drawerHead .sub { flex: 1 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drawerToggle {
+  flex: none; background: transparent; border: 0; color: var(--muted);
+  cursor: pointer; font-size: 12px; padding: 0 2px; transform: rotate(180deg);
+  transition: transform .15s ease;
+}
+.drawer.open .drawerToggle { transform: none; }
+.drawerToggle:hover { color: var(--accent); }
+
+.drawer:not(.open) .drawerHead { background: var(--panel2); }
+.drawer:not(.open) .drawerName::before { content: '▸ '; color: var(--accent); }
+.drawer.open .drawerName::before { content: '▾ '; color: var(--accent); }

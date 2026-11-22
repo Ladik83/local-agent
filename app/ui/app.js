@@ -1389,6 +1389,7 @@ function wireLayoutDrag() {
       if (target && target !== dragged && zone.contains(target)) zone.insertBefore(dragged, target);
       else zone.appendChild(dragged);
       saveLayout();
+      renderDrawerHead();
     });
   });
 }
@@ -1455,6 +1456,18 @@ function resetLayout() {
   location.reload();
 }
 
+function wireDrawerHead() {
+  const head = document.getElementById('drawerHead');
+  const toggle = document.getElementById('drawerToggle');
+  const handler = function (event) {
+    event.stopPropagation();
+    toggleDrawer();
+  };
+  if (head) head.addEventListener('click', handler);
+  if (toggle) toggle.addEventListener('click', handler);
+  renderDrawerHead();
+}
+
 function wireLayout() {
   applyLayout();
   wireLayoutDrag();
@@ -1465,6 +1478,27 @@ function wireLayout() {
   try {
     if (localStorage.getItem('agentDrawerOpen') === '0') document.getElementById('drawer').classList.remove('open');
   } catch (error) { return; }
+  renderDrawerHead();
+}
+
+function drawerBlocks() {
+  return Array.prototype.map.call(
+    document.querySelectorAll('#drawer .kblockHead b'),
+    function (node) { return node.textContent.trim(); }
+  ).filter(Boolean);
+}
+
+function renderDrawerHead() {
+  const summary = document.getElementById('drawerSummary');
+  if (!summary) return;
+  const names = drawerBlocks();
+  summary.textContent = names.length ? names.join(' · ') : 'пусто — перетащите блоки сюда';
+  const drawer = document.getElementById('drawer');
+  const toggle = document.getElementById('drawerToggle');
+  const open = !!(drawer && drawer.classList.contains('open'));
+  if (toggle) toggle.title = open ? 'Свернуть панели в полосу' : 'Развернуть панели';
+  const chevron = document.getElementById('sbChevron');
+  if (chevron) chevron.textContent = open ? '▾' : '▴';
 }
 
 function toggleDrawer() {
@@ -1472,8 +1506,7 @@ function toggleDrawer() {
   if (!drawer) return;
   drawer.classList.toggle('open');
   try { localStorage.setItem('agentDrawerOpen', drawer.classList.contains('open') ? '1' : '0'); } catch (error) { return; }
-  const chevron = document.getElementById('sbChevron');
-  if (chevron) chevron.textContent = drawer.classList.contains('open') ? '▾' : '▴';
+  renderDrawerHead();
 }
 
 function showApproval(event) {
@@ -2843,6 +2876,7 @@ bootStep('skins', wireSkins);
 bootStep('density', wireDensity);
 bootStep('drawerHeight', wireDrawerHeight);
 bootStep('rolesBlock', wireRolesBlock);
+bootStep('drawerHead', wireDrawerHead);
 bootStep('vision', wireVision);
 bootStep('tools', function () { wireTools(); return loadTools().then(renderTools); });
 bootStep('layout', wireLayout);
