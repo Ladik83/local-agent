@@ -934,7 +934,6 @@ def run(port: int = 7867, open_browser: bool = True):
     except Exception as exc:
         diag.warn("main.py:vision_cleanup", exc)
     if config.load().get("auto_update_engine"):
-        import threading
         threading.Thread(target=lambda: engine.check_latest(force=True), daemon=True).start()
     url = "http://" + HOST + ":%d/" % port
     if _alive(port):
