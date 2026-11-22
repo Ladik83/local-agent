@@ -59,6 +59,10 @@ center_html = html.split('id="composer"')[0].split('<div id="messages"')[1] if '
 model_block = html.split('data-block="model"')[1].split('data-block="resources"')[0]
 check("режимы в центре чата", 'class="modes"' in center_html)
 check("короткие подписи режимов", ">Один<span" in html and ">Команда<span" in html)
+check("режимы внутри карточки ввода", 'class="composerCard"' in html and html.index('class="modes"') < html.index('id="composer"'))
+check("подпись «Режим работы»", "Режим работы" in html)
+check("примеров не меньше восьми", html.count('data-template=') >= 8, "найдено %d" % html.count('data-template='))
+check("примеры по центру", "justify-content: center" in css and ".templates {" in css)
 check("кнопка режима агента", 'id="agentModeBtn"' in center_html)
 check("выбор модели в правой панели", 'id="modelPick"' in model_block and 'id="modelLoadBtn"' in model_block)
 check("параметры модели рядом", 'id="modelTuning"' in model_block)
