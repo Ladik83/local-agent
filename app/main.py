@@ -172,6 +172,17 @@ _SCAN_CACHE = {"ts": 0.0, "value": []}
 DISC = {"active": False, "found": [], "scanned": 0, "text": "", "error": None}
 
 
+def _model_load_reply(result: dict) -> dict:
+    """Ответ на /api/model/load: предупредить, если сборка llama.cpp не умеет flash-attn."""
+    if isinstance(result, dict) and result.get("ok"):
+        log = engine.tail(config.LOGS_DIR / "llama-server.log", 20000)
+        if "Flash Attention over K/V rows not supported" in log:
+            result["warning"] = ("Сборка llama.cpp не поддерживает flash-attn: "
+                                 "квантование KV-кеша не включится. Возьмите CPU-сборку "
+                                 "или поставьте кеш f16.")
+    return result
+
+
 def _discover() -> None:
     """Обход дисков в поисках папок с моделями."""
     DISC.update(active=True, found=[], scanned=0, text="Ищу модели на дисках", error=None)
@@ -686,9 +697,9 @@ class Handler(BaseHTTPRequestHandler):
             elif route == "/api/model/load":
                 wanted = data.get("path") or config.load().get("last_model") or ""
                 if data.get("background"):
-                    self._send(_start_job("model_load", lambda p=wanted: engine.start(p)))
+                    self._send(_start_job("model_load", lambda p=wanted: _model_load_reply(engine.start(p))))
                 else:
-                    self._send(engine.start(wanted))
+                    self._send(_model_load_reply(engine.start(wanted)))
             elif route == "/api/model/stop":
                 engine.stop()
                 self._send({"ok": True})

@@ -334,6 +334,15 @@
  <label class="row"><span>Flash-attn (ускорение)</span>
  <input type="checkbox" id="flashAttn" checked></label>
  <div class="sub">Нужен для квантованного кеша и ускоряет работу на длинном контексте. Если движок не поддерживает — выключите.</div>
+ <label class="row"><span>Без mmap (быстрее на HDD, больше ОЗУ)</span>
+ <input type="checkbox" id="noMmap"></label>
+ <div class="sub">mmap подгружает модель с диска по мере надобности. Без него модель сразу целиком читается в ОЗУ — на HDD быстрее, но памяти нужно больше.</div>
+ <label class="row"><span>Держать в памяти (mlock)</span>
+ <input type="checkbox" id="mlock"></label>
+ <div class="sub">Запрещает системе выгружать модель в файл подкачки. Нужен запас ОЗУ — иначе система начнёт тормозить.</div>
+ <label class="row"><span>Параллельных слотов</span>
+ <input type="number" id="parallel" min="1" max="4" step="1" class="wide"></label>
+ <div class="sub">1 — весь контекст одной задаче (обычный режим). 2–4 нужны серверу с несколькими клиентами: каждый слот получает свою долю контекста.</div>
  <label class="row"><span>Контекст, токенов</span>
  <input type="number" id="context" min="512" max="262144" step="512" class="wide" list="ctxPresets">
  <datalist id="ctxPresets">

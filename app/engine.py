@@ -448,18 +448,22 @@ def start(model_path: str, ctx=None, ngl=None) -> dict:
     projector = find_projector(model_path)
     cmd = [exe, "-m", model_path, "--host", "127.0.0.1", "--port", str(port),
            "-c", str(ctx), "-ngl", str(ngl), "--no-warmup"]
-    # flash-attn + квантованный KV-кеш: без них длинный контекст съедает ОЗУ
-    # и llama-server обрывает генерацию на потолке (n_tokens = ctx, truncated = 1).
-    kv = str(cfg.get("kv_cache") or "q8_0").lower()
-    if bool(cfg.get("flash_attn", True)):
-        cmd += ["--flash-attn"]
+    # один слот: иначе llama-server берёт n_slots=4 и делит контекст на четверых
+    # (при -c 131072 модель видит всего 32k и обрывает генерацию).
+    slots = int(cfg.get("parallel") or 1)
+    cmd += ["--parallel", str(max(1, min(4, slots)))]
+    if bool(cfg.get("no_mmap", False)):
+        cmd += ["--no-mmap"]
+    if bool(cfg.get("mlock", False)):
+        cmd += ["--mlock"]
+    # flash-attn + квантованный KV-кеш: без них длинный контекст съедает ОЗУ.
+    # Квантованный V-кеш работает только с flash-attn, поэтому включаем его принудительно.
+    kv = str(cfg.get("kv_cache") or "").lower()
     if kv in ("q8_0", "q4_0", "q4_1", "q5_0", "q5_1"):
-        if not bool(cfg.get("flash_attn", True)):
-            # квантованный V-кеш требует flash-attn — включаем принудительно
-            cmd += ["--flash-attn"]
-        cmd += ["--cache-type-k", kv, "--cache-type-v", kv]
-    elif kv == "f16":
-        cmd += ["--cache-type-k", "f16", "--cache-type-v", "f16"]
+        cmd += ["--flash-attn", "--cache-type-k", kv, "--cache-type-v", kv]
+    elif bool(cfg.get("flash_attn", True)):
+        # f16/пусто: --cache-type-* не нужны, это родной формат llama.cpp
+        cmd += ["--flash-attn"]
     if ngl > 0 and found:
         cmd += ["--device", found[0]["name"]]
     if projector:

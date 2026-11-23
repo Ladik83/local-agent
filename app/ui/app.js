@@ -339,6 +339,12 @@ function renderSettings() {
   if (kvSel) kvSel.value = s.kv_cache || 'q8_0';
   var fa = document.getElementById('flashAttn');
   if (fa) fa.checked = s.flash_attn !== false;
+  var nm = document.getElementById('noMmap');
+  if (nm) nm.checked = !!s.no_mmap;
+  var ml = document.getElementById('mlock');
+  if (ml) ml.checked = !!s.mlock;
+  var par = document.getElementById('parallel');
+  if (par) par.value = String(s.parallel || 1);
   const approval = document.getElementById('approvalMode');
   if (approval) approval.value = s.approval_mode || 'ask';
   const e = STATE.engine;
@@ -893,6 +899,9 @@ async function saveSettings() {
     context: parseInt(document.getElementById('context').value, 10) || 8192,
     kv_cache: ((document.getElementById('kvCache') || {}).value) || 'q8_0',
     flash_attn: (document.getElementById('flashAttn') || {}).checked !== false,
+    no_mmap: (document.getElementById('noMmap') || {}).checked === true,
+    mlock: (document.getElementById('mlock') || {}).checked === true,
+    parallel: Math.max(1, Math.min(4, parseInt((document.getElementById('parallel') || {}).value, 10) || 1)),
     embed_model: ((document.getElementById('embedModel') || {}).value || '').trim(),
     update_pubkey: ((document.getElementById('updatePubkey') || {}).value || '').trim(),
     update_url: ((document.getElementById('updateUrl') || {}).value || '').trim()
