@@ -335,6 +335,10 @@ function renderSettings() {
   if (updateUrl && document.activeElement !== updateUrl) updateUrl.value = s.update_url || '';
   document.getElementById('extraDirs').value = (s.extra_dirs || []).join('; ');
   document.getElementById('context').value = String(s.context || 8192);
+  var kvSel = document.getElementById('kvCache');
+  if (kvSel) kvSel.value = s.kv_cache || 'q8_0';
+  var fa = document.getElementById('flashAttn');
+  if (fa) fa.checked = s.flash_attn !== false;
   const approval = document.getElementById('approvalMode');
   if (approval) approval.value = s.approval_mode || 'ask';
   const e = STATE.engine;
@@ -887,6 +891,8 @@ async function saveSettings() {
     extra_dirs: document.getElementById('extraDirs').value.split(';').map(function (t) { return t.trim(); }).filter(Boolean),
     approval_mode: (document.getElementById('approvalMode') || {}).value || 'ask',
     context: parseInt(document.getElementById('context').value, 10) || 8192,
+    kv_cache: ((document.getElementById('kvCache') || {}).value) || 'q8_0',
+    flash_attn: (document.getElementById('flashAttn') || {}).checked !== false,
     embed_model: ((document.getElementById('embedModel') || {}).value || '').trim(),
     update_pubkey: ((document.getElementById('updatePubkey') || {}).value || '').trim(),
     update_url: ((document.getElementById('updateUrl') || {}).value || '').trim()

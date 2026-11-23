@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Аквариум — 3D</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #06131f; overflow: hidden; font: 14px/1.4 "Segoe UI", system-ui, sans-serif; color: #dfe9f5; }
+  #scene { position: fixed; inset: 0; }
+  .hint { position: fixed; left: 14px; bottom: 14px; opacity: .8; font-size: 12.5px; }
+  .panel { position: fixed; right: 14px; bottom: 14px; display: flex; gap: 8px; }
+  .panel button {
+    background: rgba(20, 40, 60, .8); color: #dfe9f5; border: 1px solid #2b5878;
+    border-radius: 10px; padding: 7px 13px; font: inherit; cursor: pointer; backdrop-filter: blur(4px);
+  }
+  .panel button:hover { border-color: #4a9ecb; }
+  .title { position: fixed; left: 14px; top: 12px; font-size: 13px; letter-spacing: .5px; opacity: .7; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div id="scene"></div>
+<div class="title">Аквариум · гуппи, краб, улитки</div>
+<div class="hint">мышь — вращать · колесо — приблизить</div>
+<div class="panel">
+  <button id="pause">Пауза</button>
+  <button id="light">Свет: вкл</button>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+const W = 26, H = 16, D = 16;           // габариты аквариума
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07131f);
+scene.fog = new THREE.Fog(0x0a2233, 40, 95);
+
+const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 400);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('scene').appendChild(renderer.domElement);
+
+/* ---------- свет ---------- */
+const top = new THREE.DirectionalLight(0xdff3ff, 2.1);
+top.position.set(6, 34, 10);
+top.castShadow = true;
+top.shadow.mapSize.set(1024, 1024);
+top.shadow.camera.left = -22; top.shadow.camera.right = 22;
+top.shadow.camera.top = 22; top.shadow.camera.bottom = -22;
+scene.add(top);
+
+const back = new THREE.PointLight(0x2ea8d8, 1.5, 70, 2);
+back.position.set(-6, 8, -12);
+scene.add(back);
+
+const fill = new THREE.HemisphereLight(0x9fd8ff, 0x0a1a24, 0.75);
+scene.add(fill);
+
+/* ---------- материалы ---------- */
+const glassMat = new THREE.MeshPhysicalMaterial({
+  color: 0xaee6ff, transparent: true, opacity: 0.13, roughness: 0.06,
+  metalness: 0, transmission: 0.9, side: THREE.DoubleSide, depthWrite: false
+});
+const waterMat = new THREE.MeshPhysicalMaterial({
+  color: 0x1f7fb5, transparent: true, opacity: 0.17, roughness: 0.25, metalness: 0,
+  side: THREE.DoubleSide, depthWrite: false
+});
+const gravelMat = new THREE.MeshStandardMaterial({ color: 0xb9a98c, roughness: 0.9 });
+const stoneMat = new THREE.MeshStandardMaterial({ color: 0x7d8794, roughness: 0.85 });
+const castleMat = new THREE.MeshStandardMaterial({ color: 0xa9b2bd, roughness: 0.8 });
+const roofMat = new THREE.MeshStandardMaterial({ color: 0x8c4a4a, roughness: 0.7 });
+const plantMat = new THREE.MeshStandardMaterial({ color: 0x2f8f4e, roughness: 0.75 });
+const plantMat2 = new THREE.MeshStandardMaterial({ color: 0x1f6f3c, roughness: 0.75 });
+
+/* ---------- аквариум ---------- */
+const tank = new THREE.Group();
+scene.add(tank);
+
+const glass = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), glassMat);
+glass.position.y = H / 2;
+tank.add(glass);
+
+const edges = new THREE.LineSegments(
+  new THREE.EdgesGeometry(new THREE.BoxGeometry(W, H, D)),
+  new THREE.LineBasicMaterial({ color: 0x77c8ee, transparent: true, opacity: 0.55 })
+);
+edges.position.y = H / 2;
+tank.add(edges);
+
+const water = new THREE.Mesh(new THREE.BoxGeometry(W - 0.3, H - 1.4, D - 0.3), waterMat);
+water.position.y = (H - 1.4) / 2 + 0.2;
+tank.add(water);
+
+const surface = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.4, D - 0.4, 24, 24), new THREE.MeshPhysicalMaterial({
+  color: 0x9fe4ff, transparent: true, opacity: 0.28, roughness: 0.1, metalness: 0.2, side: THREE.DoubleSide
+}));
+surface.rotation.x = -Math.PI / 2;
+surface.position.y = H - 1.3;
+tank.add(surface);
+
+/* ---------- дно: гравий ---------- */
+const gravel = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 6, 5), gravelMat, 420);
+const dummy = new THREE.Object3D();
+const colors = [0xc9b892, 0xa8987a, 0xd8c9a8, 0x8d7f68];
+gravel.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(420 * 3), 3);
+for (let i = 0; i < 420; i++) {
+  dummy.position.set((Math.random() - 0.5) * (W - 1.2), 0.16 + Math.random() * 0.14, (Math.random() - 0.5) * (D - 1.2));
+  dummy.scale.setScalar(0.7 + Math.random() * 0.9);
+  dummy.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+  dummy.updateMatrix();
+  gravel.setMatrixAt(i, dummy.matrix);
+  const c = new THREE.Color(colors[i % colors.length]);
+  gravel.setColorAt(i, c);
+}
+gravel.receiveShadow = true;
+tank.add(gravel);
+
+const floor = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, 0.4, D - 0.2), stoneMat);
+floor.position.y = 0.1;
+floor.receiveShadow = true;
+tank.add(floor);
+
+/* ---------- камни ---------- */
+function rock(x, z, size) {
+  const m = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 0), stoneMat);
+  m.position.set(x, size * 0.55, z);
+  m.rotation.set(Math.random(), Math.random(), Math.random());
+  m.castShadow = true; m.receiveShadow = true;
+  tank.add(m);
+  return m;
+}
+rock(-8, -3, 1.5); rock(7.5, -4, 1.9); rock(-6.5, 4.5, 1.2); rock(6, 4, 1.1);
+
+/* ---------- замок ---------- */
+const castle = new THREE.Group();
+castle.position.set(-1.5, 0.2, -5.2);
+tank.add(castle);
+
+const base = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.6, 1.1, 12), stoneMat);
+base.position.y = 0.55; base.castShadow = true; base.receiveShadow = true;
+castle.add(base);
+
+function tower(x, z, r, h) {
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.06, h, 12), castleMat);
+  body.position.set(x, h / 2 + 1, z);
+  body.castShadow = true; body.receiveShadow = true;
+  castle.add(body);
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(r * 1.3, r * 1.5, 12), roofMat);
+  roof.position.set(x, h + 1 + r * 0.7, z);
+  roof.castShadow = true;
+  castle.add(roof);
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.3), new THREE.MeshStandardMaterial({ color: 0xe0b23a, side: THREE.DoubleSide }));
+  flag.position.set(x + 0.28, h + 1 + r * 1.5 + 0.2, z);
+  castle.add(flag);
+}
+tower(-2.1, -0.6, 1.15, 4.4);
+tower(2.1, -0.9, 1.0, 3.7);
+tower(0.2, 1.8, 0.85, 2.9);
+
+const keep = new THREE.Mesh(new THREE.BoxGeometry(3.0, 3.1, 2.4), castleMat);
+keep.position.set(0, 2.6, 0);
+keep.castShadow = true; keep.receiveShadow = true;
+castle.add(keep);
+
+for (let i = 0; i < 5; i++) {
+  const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.42), castleMat);
+  tooth.position.set(-1.2 + i * 0.6, 4.35, 1.05);
+  castle.add(tooth);
+}
+
+const gate = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.5, 14, 1, false, 0, Math.PI), castleMat);
+gate.rotation.z = Math.PI / 2;
+gate.rotation.y = Math.PI / 2;
+gate.position.set(0, 1.6, 1.22);
+castle.add(gate);
+
+for (let i = 0; i < 3; i++) {
+  const win = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshStandardMaterial({ color: 0xffd98a, emissive: 0xffbb44, emissiveIntensity: 0.8 }));
+  win.position.set(-0.8 + i * 0.8, 2.9, 1.3);
+  castle.add(win);
+}
+
+/* ---------- сундук и ракушки ---------- */
+const chest = new THREE.Group();
+chest.position.set(8.2, 0.4, 2.6);
+chest.rotation.y = -0.6;
+tank.add(chest);
+const chestBody = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.0, 1.2), new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.8 }));
+chestBody.position.y = 0.5; chestBody.castShadow = true;
+chest.add(chestBody);
+const chestLid = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 1.8, 12, 1, false, 0, Math.PI), new THREE.MeshStandardMaterial({ color: 0x7d5730, roughness: 0.8 }));
+chestLid.rotation.z = Math.PI / 2;
+chestLid.position.y = 1.0;
+chest.add(chestLid);
+
+for (let i = 0; i < 3; i++) {
+  const shell = new THREE.Mesh(new THREE.TorusGeometry(0.35, 0.13, 8, 16, Math.PI * 1.4), new THREE.MeshStandardMaterial({ color: 0xf0d7c2, roughness: 0.6 }));
+  shell.position.set(-9 + i * 1.1, 0.3, 6.2 - i * 0.7);
+  shell.rotation.x = -Math.PI / 2.2;
+  tank.add(shell);
+}
+
+/* ---------- водоросли ---------- */
+const plants = [];
+function plant(x, z, height, mat) {
+  const g = new THREE.Group();
+  g.position.set(x, 0.2, z);
+  const blades = 5 + Math.floor(Math.random() * 4);
+  for (let i = 0; i < blades; i++) {
+    const h = height * (0.6 + Math.random() * 0.6);
+    const blade = new THREE.Mesh(new THREE.ConeGeometry(0.16, h, 5), mat);
+    blade.position.set((Math.random() - 0.5) * 0.9, h / 2, (Math.random() - 0.5) * 0.9);
+    blade.rotation.z = (Math.random() - 0.5) * 0.35;
+    blade.rotation.x = (Math.random() - 0.5) * 0.35;
+    blade.castShadow = true;
+    g.add(blade);
+  }
+  g.userData.phase = Math.random() * Math.PI * 2;
+  g.userData.amp = 0.05 + Math.random() * 0.08;
+  tank.add(g);
+  plants.push(g);
+}
+plant(-9.5, -5.5, 6, plantMat); plant(-7.2, -6.2, 4.5, plantMat2);
+plant(9.6, -6.0, 5.5, plantMat); plant(7.4, -6.4, 3.8, plantMat2);
+plant(-10.5, 2.0, 4.2, plantMat2); plant(10.2, 0.5, 4.8, plantMat);
+plant(-4.0, 6.6, 3.4, plantMat); plant(4.6, 6.4, 3.0, plantMat2);
+
+/* ---------- помпа и пузырьки ---------- */
+const pump = new THREE.Group();
+pump.position.set(-10.6, 0.2, -1.5);
+tank.add(pump);
+const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 9, 8), new THREE.MeshStandardMaterial({ color: 0x8fa6b8, roughness: 0.5 }));
+tube.position.y = 4.5;
+tank.add(tube.clone().translateX(-10.6).translateZ(-1.5));
+const aerator = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 0.5, 12), new THREE.MeshStandardMaterial({ color: 0x445566, roughness: 0.7 }));
+aerator.position.set(-10.6, 0.5, -1.5);
+tank.add(aerator);
+
+const bubbles = [];
+const bubbleMat = new THREE.MeshPhysicalMaterial({ color: 0xdcf4ff, transparent: true, opacity: 0.55, roughness: 0.05, metalness: 0 });
+for (let i = 0; i < 70; i++) {
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.07 + Math.random() * 0.06, 6, 6), bubbleMat);
+  b.position.set(-10.6 + (Math.random() - 0.5) * 0.5, 0.5 + Math.random() * H, -1.5 + (Math.random() - 0.5) * 0.5);
+  b.userData.speed = 0.8 + Math.random() * 1.5;
+  b.userData.drift = (Math.random() - 0.5) * 0.5;
+  tank.add(b);
+  bubbles.push(b);
+}
+
+/* ---------- гуппи ---------- */
+const fishes = [];
+const palettes = [0xff8a3d, 0x4aa3ff, 0xffd34a, 0xff5f8a, 0x7ef0c0, 0xb388ff, 0xffa64d];
+
+function makeGuppy(color) {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.35, metalness: 0.25 });
+  const finMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.5, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 10), bodyMat);
+  body.scale.set(1.7, 0.78, 0.62);
+  body.castShadow = true;
+  g.add(body);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), bodyMat);
+  head.position.x = 0.72;
+  g.add(head);
+
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.46, 1.1, 3, 1, true), finMat);
+  tail.rotation.z = Math.PI / 2;
+  tail.rotation.x = Math.PI / 2;
+  tail.scale.set(1, 1, 0.25);
+  tail.position.x = -1.05;
+  g.add(tail);
+  g.userData.tail = tail;
+
+  const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.6, 3, 1, true), finMat);
+  dorsal.position.set(-0.1, 0.42, 0);
+  dorsal.scale.set(1, 1, 0.3);
+  g.add(dorsal);
+
+  const pectoralL = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.42, 3, 1, true), finMat);
+  pectoralL.position.set(0.35, -0.05, 0.3);
+  pectoralL.rotation.x = 0.5;
+  g.add(pectoralL);
+  const pectoralR = pectoralL.clone();
+  pectoralR.position.z = -0.3;
+  pectoralR.rotation.x = -0.5;
+  g.add(pectoralR);
+
+  const eyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), new THREE.MeshStandardMaterial({ color: 0xf7fbff }));
+  eyeWhite.position.set(0.92, 0.12, 0.2);
+  g.add(eyeWhite);
+  const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), new THREE.MeshStandardMaterial({ color: 0x111318 }));
+  pupil.position.set(0.97, 0.12, 0.22);
+  g.add(pupil);
+
+  return g;
+}
+
+for (let i = 0; i < 7; i++) {
+  const fish = makeGuppy(palettes[i % palettes.length]);
+  fish.scale.setScalar(0.85 + Math.random() * 0.35);
+  tank.add(fish);
+  fishes.push({
+    mesh: fish,
+    phase: Math.random() * Math.PI * 2,
+    speed: 0.35 + Math.random() * 0.45,
+    rx: 3.2 + Math.random() * 5.2,
+    rz: 2.4 + Math.random() * 4.4,
+    ry: 1.2 + Math.random() * 2.4,
+    cx: (Math.random() - 0.5) * 6,
+    cz: (Math.random() - 0.5) * 5,
+    cy: 4.5 + Math.random() * 5.5,
+    wag: 8 + Math.random() * 6
+  });
+}
+
+function fishPoint(f, t) {
+  const a = t * f.speed + f.phase;
+  return new THREE.Vector3(
+    f.cx + Math.sin(a) * f.rx + Math.sin(a * 2.3 + f.phase) * 1.1,
+    f.cy + Math.sin(a * 1.7) * f.ry * 0.5 + Math.sin(a * 0.6) * 0.9,
+    f.cz + Math.cos(a * 0.8) * f.rz + Math.sin(a * 1.9) * 1.2
+  );
+}
+
+/* ---------- краб ---------- */
+const crab = new THREE.Group();
+crab.position.set(4.5, 0.6, 3.2);
+tank.add(crab);
+const crabMat = new THREE.MeshStandardMaterial({ color: 0xd8542f, roughness: 0.6 });
+const crabBody = new THREE.Mesh(new THREE.SphereGeometry(0.9, 14, 10), crabMat);
+crabBody.scale.set(1.35, 0.62, 1.05);
+crabBody.castShadow = true;
+crab.add(crabBody);
+for (let i = 0; i < 4; i++) {
+  [-1, 1].forEach(function (side) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.05, 1.1, 6), crabMat);
+    leg.position.set(-0.55 + i * 0.4, -0.2, side * 1.0);
+    leg.rotation.x = side * 0.9;
+    leg.rotation.z = 0.25 * (i % 2 ? 1 : -1);
+    crab.add(leg);
+  });
+}
+[-1, 1].forEach(function (side) {
+  const claw = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), crabMat);
+  claw.scale.set(1.2, 0.7, 0.8);
+  claw.position.set(1.15, 0.25, side * 0.7);
+  crab.add(claw);
+  const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.45, 6), crabMat);
+  stalk.position.set(0.75, 0.5, side * 0.3);
+  crab.add(stalk);
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), new THREE.MeshStandardMaterial({ color: 0x14181f }));
+  eye.position.set(0.78, 0.74, side * 0.3);
+  crab.add(eye);
+});
+
+/* ---------- улитки ---------- */
+const snails = [];
+function makeSnail(scale) {
+  const g = new THREE.Group();
+  const shell = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.2, 10, 20, Math.PI * 1.75), new THREE.MeshStandardMaterial({ color: 0xc9a06a, roughness: 0.5 }));
+  shell.rotation.x = -Math.PI / 2;
+  shell.position.y = 0.42;
+  shell.castShadow = true;
+  g.add(shell);
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.7, 6, 10), new THREE.MeshStandardMaterial({ color: 0xe8d9bd, roughness: 0.7 }));
+  body.rotation.z = Math.PI / 2;
+  body.position.set(0.1, 0.16, 0);
+  g.add(body);
+  [-1, 1].forEach(function (side) {
+    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.02, 0.35, 5), new THREE.MeshStandardMaterial({ color: 0xd9c8a8 }));
+    antenna.position.set(0.6, 0.36, side * 0.1);
+    antenna.rotation.z = -0.5;
+    g.add(antenna);
+  });
+  g.scale.setScalar(scale);
+  return g;
+}
+[[-3.5, 5.6], [6.5, -2.2], [-0.5, 3.4]].forEach(function (pos, i) {
+  const snail = makeSnail(0.75 + i * 0.15);
+  snail.position.set(pos[0], 0.25, pos[1]);
+  tank.add(snail);
+  snails.push({ mesh: snail, phase: Math.random() * 6, radius: 1.2 + i * 0.5, cx: pos[0], cz: pos[1], speed: 0.12 + i * 0.05 });
+});
+
+/* ---------- каустика (блики на дне) ---------- */
+const caustics = [];
+for (let i = 0; i < 9; i++) {
+  const blob = new THREE.Mesh(new THREE.CircleGeometry(1.6 + Math.random() * 1.6, 20), new THREE.MeshBasicMaterial({
+    color: 0xbfeaff, transparent: true, opacity: 0.06, blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  blob.rotation.x = -Math.PI / 2;
+  blob.position.set((Math.random() - 0.5) * (W - 4), 0.42, (Math.random() - 0.5) * (D - 4));
+  blob.userData.phase = Math.random() * 6;
+  tank.add(blob);
+  caustics.push(blob);
+}
+
+/* ---------- камера: вращение мышью ---------- */
+const orbit = { radius: 44, theta: 0.6, phi: 1.15, target: new THREE.Vector3(0, 6.5, 0) };
+let dragging = false, lastX = 0, lastY = 0;
+
+function applyCamera() {
+  const r = orbit.radius;
+  camera.position.set(
+    orbit.target.x + r * Math.sin(orbit.phi) * Math.cos(orbit.theta),
+    orbit.target.y + r * Math.cos(orbit.phi),
+    orbit.target.z + r * Math.sin(orbit.phi) * Math.sin(orbit.theta)
+  );
+  camera.lookAt(orbit.target);
+}
+applyCamera();
+
+renderer.domElement.addEventListener('pointerdown', function (e) { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+renderer.domElement.addEventListener('pointerup', function () { dragging = false; });
+renderer.domElement.addEventListener('pointerleave', function () { dragging = false; });
+renderer.domElement.addEventListener('pointermove', function (e) {
+  if (!dragging) return;
+  orbit.theta -= (e.clientX - lastX) * 0.006;
+  orbit.phi = Math.max(0.25, Math.min(1.5, orbit.phi - (e.clientY - lastY) * 0.005));
+  lastX = e.clientX; lastY = e.clientY;
+  applyCamera();
+});
+renderer.domElement.addEventListener('wheel', function (e) {
+  e.preventDefault();
+  orbit.radius = Math.max(20, Math.min(78, orbit.radius + e.deltaY * 0.03));
+  applyCamera();
+}, { passive: false });
+
+/* ---------- панель ---------- */
+let paused = false, lightOn = true;
+document.getElementById('pause').onclick = function () {
+  paused = !paused;
+  this.textContent = paused ? 'Продолжить' : 'Пауза';
+};
+document.getElementById('light').onclick = function () {
+  lightOn = !lightOn;
+  top.intensity = lightOn ? 2.1 : 0.25;
+  back.intensity = lightOn ? 1.5 : 0.15;
+  fill.intensity = lightOn ? 0.75 : 0.15;
+  this.textContent = lightOn ? 'Свет: вкл' : 'Свет: выкл';
+};
+
+addEventListener('resize', function () {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ---------- анимация ---------- */
+const clock = new THREE.Clock();
+let t = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  if (!paused) t += dt;
+
+  fishes.forEach(function (f) {
+    const here = fishPoint(f, t);
+    const next = fishPoint(f, t + 0.15);
+    f.mesh.position.copy(here);
+    f.mesh.lookAt(next);
+    if (f.mesh.userData.tail) {
+      f.mesh.userData.tail.rotation.x = Math.PI / 2 + Math.sin(t * f.wag + f.phase) * 0.5;
+    }
+  });
+
+  bubbles.forEach(function (b) {
+    b.position.y += b.userData.speed * dt;
+    b.position.x += Math.sin(t * 2 + b.position.y) * b.userData.drift * dt;
+    if (b.position.y > H - 1.4) {
+      b.position.y = 0.5;
+      b.position.x = -10.6 + (Math.random() - 0.5) * 0.5;
+      b.position.z = -1.5 + (Math.random() - 0.5) * 0.5;
+    }
+  });
+
+  plants.forEach(function (p) {
+    p.rotation.z = Math.sin(t * 0.8 + p.userData.phase) * p.userData.amp;
+    p.rotation.x = Math.cos(t * 0.6 + p.userData.phase) * p.userData.amp * 0.7;
+  });
+
+  if (!paused) {
+    crab.position.x = 4.5 + Math.sin(t * 0.35) * 2.6;
+    crab.position.z = 3.2 + Math.cos(t * 0.28) * 1.8;
+    crab.rotation.y = Math.sin(t * 0.35) * -0.9;
+    crab.position.y = 0.6 + Math.abs(Math.sin(t * 4)) * 0.06;
+  }
+
+  snails.forEach(function (s) {
+    const a = t * s.speed + s.phase;
+    s.mesh.position.x = s.cx + Math.cos(a) * s.radius;
+    s.mesh.position.z = s.cz + Math.sin(a) * s.radius;
+    s.mesh.rotation.y = -a - Math.PI / 2;
+  });
+
+  caustics.forEach(function (c) {
+    c.position.x += Math.sin(t * 0.4 + c.userData.phase) * 0.004;
+    c.position.z += Math.cos(t * 0.33 + c.userData.phase) * 0.004;
+    c.material.opacity = 0.045 + Math.abs(Math.sin(t * 0.8 + c.userData.phase)) * 0.05;
+  });
+
+  surface.position.y = H - 1.3 + Math.sin(t * 1.2) * 0.03;
+  renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>

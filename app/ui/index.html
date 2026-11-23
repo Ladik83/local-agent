@@ -323,6 +323,17 @@
  <div class="row"><span>Версия приложения <b id="appVersion">—</b></span><span><button class="ghost" id="updateCheck">Проверить обновление приложения</button> <button class="primary tiny" id="updateApply" style="display:none">Обновить</button></span></div>
  <div class="sub" id="updateState"></div>
  <div class="sub" style="margin:-4px 0 10px 2px">Вставьте ключ из sign_update.py keygen — тогда приложение принимает только подписанные манифесты.</div>
+ <label class="row"><span>Квантование KV-кеша</span>
+ <select id="kvCache" class="wide">
+ <option value="q8_0">q8_0 — экономит ОЗУ, почти без потерь (рекомендуется)</option>
+ <option value="q5_1">q5_1 — ещё меньше памяти</option>
+ <option value="q4_0">q4_0 — минимум памяти, для очень длинного контекста</option>
+ <option value="f16">f16 — без сжатия, максимальная точность</option>
+ </select></label>
+ <div class="sub">Длинный контекст (128K–256K) без сжатия кеша съедает десятки гигабайт. q8_0 уменьшает кеш почти вдвое.</div>
+ <label class="row"><span>Flash-attn (ускорение)</span>
+ <input type="checkbox" id="flashAttn" checked></label>
+ <div class="sub">Нужен для квантованного кеша и ускоряет работу на длинном контексте. Если движок не поддерживает — выключите.</div>
  <label class="row"><span>Контекст, токенов</span>
  <input type="number" id="context" min="512" max="262144" step="512" class="wide" list="ctxPresets">
  <datalist id="ctxPresets">

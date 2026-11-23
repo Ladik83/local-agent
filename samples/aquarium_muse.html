@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>3D Аквариум</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,Segoe UI,Roboto,sans-serif}
+canvas{display:block}
+#ui{position:absolute;top:10px;left:10px;color:#fff;background:rgba(0,0,0,.45);padding:10px 12px;border-radius:10px;backdrop-filter:blur(4px)}
+#ui button,#ui label{margin-top:6px;display:inline-block}
+button{background:#fff1;color:#fff;border:1px solid #fff2;padding:6px 10px;border-radius:6px;cursor:pointer}
+button:hover{background:#fff2}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js"}}
+</script>
+</head>
+<body>
+<div id="ui">
+<div>мышь — вращать, колесо — приблизить</div>
+<button id="pauseBtn">Пауза</button>
+<label><input type="checkbox" id="lightToggle" checked> Свет</label>
+</div>
+<script type="module">
+import * as THREE from 'three';
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x7ec8e3);
+scene.fog = new THREE.FogExp2(0xa0d8ef,0.035);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 100);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const ambient = new THREE.AmbientLight(0xffffff,0.6);
+scene.add(ambient);
+const sun = new THREE.DirectionalLight(0xffffff,1.2);
+sun.position.set(5,8,4);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024,1024);
+scene.add(sun);
+const back = new THREE.PointLight(0xaad4ff,0.8,20);
+back.position.set(-4,2,-6);
+scene.add(back);
+
+const W=8,H=6,D=6;
+const aquarium = new THREE.Group();
+scene.add(aquarium);
+
+// стекло
+const glassMat = new THREE.MeshPhysicalMaterial({color:0xffffff,transparent:true,opacity:0.12,roughness:0.05,transmission:0.95,thickness:0.1,side:THREE.BackSide});
+const glass = new THREE.Mesh(new THREE.BoxGeometry(W,H,D), glassMat);
+aquarium.add(glass);
+
+// гравий
+const gravelGroup = new THREE.Group();
+aquarium.add(gravelGroup);
+const gravelGeo = new THREE.SphereGeometry(1,8,8);
+for(let i=0;i<220;i++){
+  const m = new THREE.MeshStandardMaterial({color:new THREE.Color().setHSL(0.08+Math.random()*0.05,0.3,0.35+Math.random()*0.15)});
+  const s = new THREE.Mesh(gravelGeo,m);
+  s.scale.setScalar(0.3+Math.random()*0.6);
+  s.position.set((Math.random()-0.5)*(W-0.6), -H/2+0.05+Math.random()*0.15, (Math.random()-0.5)*(D-0.6));
+  s.castShadow=true;
+  gravelGroup.add(s);
+}
+
+// вода
+const waterMat = new THREE.MeshPhysicalMaterial({color:0x6fbfff,transparent:true,opacity:0.38,roughness:0.1,transmission:0.8,side:THREE.DoubleSide});
+const water = new THREE.Mesh(new THREE.PlaneGeometry(W*0.99,D*0.99,32,32), waterMat);
+water.rotation.x = -Math.PI/2;
+water.position.y = H*0.15;
+aquarium.add(water);
+
+// каустика
+const causticMat = new THREE.ShaderMaterial({
+  uniforms:{time:{value:0}},
+  vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+  fragmentShader:`varying vec2 vUv;uniform float time;void main(){vec2 uv=vUv*12.0;float p=sin(uv.x+time*0.7)*sin(uv.y-time*0.9);float p2=sin(uv.x*2.3-time*0.5)*sin(uv.y*1.7+time*0.6);float a=0.5+0.5*p*p2;gl_FragColor=vec4(0.8,0.95,1.0,a*0.18);}`,
+  transparent:true,depthWrite:false,blending:THREE.AdditiveBlending
+});
+const caustics = new THREE.Mesh(new THREE.PlaneGeometry(W*0.95,D*0.95), causticMat);
+caustics.rotation.x=-Math.PI/2;
+caustics.position.y=-H/2+0.01;
+aquarium.add(caustics);
+
+// замок
+const castle = new THREE.Group();
+aquarium.add(castle);
+const stoneMat = new THREE.MeshStandardMaterial({color:0xc2b59b,roughness:0.9});
+const baseRock = new THREE.Mesh(new THREE.SphereGeometry(1.2,12,12), stoneMat);
+baseRock.scale.y=0.6;
+baseRock.position.y=-H/2+0.6;
+castle.add(baseRock);
+function tower(x,z){
+  const t = new THREE.Group();
+  const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.55,0.65,2.2,10), stoneMat);
+  cyl.position.y=1.1;
+  cyl.castShadow=true;
+  t.add(cyl);
+  const cone = new THREE.Mesh(new THREE.ConeGeometry(0.65,0.8,10), stoneMat);
+  cone.position.y=2.5;
+  t.add(cone);
+  for(let i=0;i<4;i++){const b=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.25,0.7),stoneMat);b.position.y=1.6+i*0.35;b.castShadow=true;t.add(b);}
+  t.position.set(x,-H/2+0.6,z);
+  castle.add(t);
+}
+tower(-1.2,-1.0); tower(1.2,-0.8); tower(0,1.2);
+// арка
+const arch = new THREE.Mesh(new THREE.TorusGeometry(0.6,0.12,12,24,Math.PI), stoneMat);
+arch.rotation.x=Math.PI/2; arch.position.set(0,-H/2+0.9, D/2-0.3); castle.add(arch);
+
+// водоросли
+const plants=[];
+for(let i=0;i<10;i++){
+  const g=new THREE.Group();
+  const baseY=-H/2+0.1;
+  const cx=(Math.random()-0.5)*(W-1.5), cz=(Math.random()-0.5)*(D-1.5);
+  g.position.set(cx,baseY,cz);
+  const col=new THREE.Color().setHSL(0.3+Math.random()*0.1,0.6,0.35);
+  const mat=new THREE.MeshStandardMaterial({color:col});
+  let y=0;
+  for(let j=0;j<3+Math.floor(Math.random()*3);j++){
+    const h=0.6+Math.random()*0.6;
+    const c=new THREE.Mesh(new THREE.ConeGeometry(0.08+Math.random()*0.06,h,6),mat);
+    c.position.y=y+h/2;
+    g.add(c); y+=h;
+  }
+  g.userData={phase:Math.random()*Math.PI*2,amp:0.15+Math.random()*0.15,freq:0.3+Math.random()*0.4};
+  aquarium.add(g); plants.push(g);
+}
+
+// декор
+const rockMat=new THREE.MeshStandardMaterial({color:0x9a8a7a,roughness:0.95});
+for(let i=0;i<6;i++){const r=new THREE.Mesh(new THREE.IcosahedronGeometry(0.25+Math.random()*0.3,0),rockMat);r.position.set((Math.random()-0.5)*6,-H/2+0.2+Math.random()*0.1,(Math.random()-0.5)*6);r.castShadow=true;aquarium.add(r);}
+const chest=new THREE.Group();
+const chestMat=new THREE.MeshStandardMaterial({color:0x8b4513});
+const box=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.4,0.5),chestMat);box.position.y=-H/2+0.2;chest.add(box);
+const lid=new THREE.Mesh(new THREE.BoxGeometry(0.75,0.1,0.55),chestMat);lid.position.y=-H/2+0.35;lid.rotation.x=0.3;chest.add(lid);
+chest.position.set(2.2,-H/2+0.2,-1.5);aquarium.add(chest);
+
+// помпа пузырьков
+const pump=new THREE.Group();
+const tube=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.05,1.2,8),new THREE.MeshStandardMaterial({color:0x444444}));
+tube.position.y=0.6; pump.add(tube);
+const spray=new THREE.Mesh(new THREE.SphereGeometry(0.12,8,8),new THREE.MeshStandardMaterial({color:0x888888}));
+spray.position.y=1.2; pump.add(spray);
+pump.position.set(-W/2+0.5,-H/2+0.1,-W/2+0.5);
+aquarium.add(pump);
+
+const bubbles=[];
+const bubbleGeo=new THREE.SphereGeometry(0.03,8,8);
+const bubbleMat=new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.7});
+for(let i=0;i<80;i++){const b=new THREE.Mesh(bubbleGeo,bubbleMat);b.visible=false;b.userData={vy:0.02+Math.random()*0.03};aquarium.add(b);bubbles.push(b);}
+
+// рыбы
+const fishGroup=new THREE.Group(); aquarium.add(fishGroup);
+const fishColors=[[0xff7a3d],[0x3dafff],[0xffd54a],[0xff5a8a],[0x7ed321],[0x4a90e2]];
+function makeFish(col){
+  const g=new THREE.Group();
+  const bodyMat=new THREE.MeshStandardMaterial({color:col,roughness:0.4});
+  const body=new THREE.Mesh(new THREE.SphereGeometry(0.22,12,12),bodyMat);
+  body.scale.set(1,1.4,0.7); g.add(body);
+  const tail=new THREE.Mesh(new THREE.ConeGeometry(0.12,0.35,8),bodyMat);
+  tail.position.z=-0.35; tail.rotation.x=Math.PI/2; g.add(tail);
+  const fin=new THREE.Mesh(new THREE.ConeGeometry(0.08,0.2,6),bodyMat);
+  fin.position.set(0,0.18,0); fin.rotation.x=-Math.PI/2; g.add(fin);
+  const eye=new THREE.Mesh(new THREE.SphereGeometry(0.04,8,8),new THREE.MeshStandardMaterial({color:0x111111}));
+  eye.position.set(0.18,0.05,0.15); g.add(eye);
+  g.userData={tail:tail,speed:0.6+Math.random()*0.6};
+  return g;
+}
+const fishes=[];
+for(let i=0;i<7;i++){
+  const f=makeFish(fishColors[i%fishColors.length][0]);
+  f.position.set((Math.random()-0.5)*5, (Math.random()-0.5)*2+0.5, (Math.random()-0.5)*4);
+  f.userData.base={x:f.position.x,y:f.position.y,z:f.position.z};
+  f.userData.ampX=0.8+Math.random()*1.2; f.userData.ampY=0.4+Math.random()*0.6; f.userData.ampZ=0.8+Math.random()*1.2;
+  f.userData.fx=0.3+Math.random()*0.5; f.userData.fy=0.4+Math.random()*0.5; f.userData.fz=0.35+Math.random()*0.5;
+  f.userData.px=Math.random()*Math.PI*2; f.userData.py=Math.random()*Math.PI*2; f.userData.pz=Math.random()*Math.PI*2;
+  f.userData.ampX2=0.3+Math.random()*0.5; f.userData.fx2=0.7+Math.random()*0.6;
+  fishGroup.add(f); fishes.push(f);
+}
+
+// краб
+const crab=new THREE.Group();
+const crabMat=new THREE.MeshStandardMaterial({color:0xd98c4a,roughness:0.8});
+const shell=new THREE.Mesh(new THREE.SphereGeometry(0.35,12,12),crabMat); shell.scale.set(1,0.6,1); shell.position.y=0.1; crab.add(shell);
+for(let i=0;i<8;i++){
+  const leg=new THREE.Group();
+  const seg1=new THREE.Mesh(new THREE.CapsuleGeometry(0.04,0.25,4,8),crabMat);
+  seg1.rotation.z=Math.PI/2; leg.add(seg1);
+  const seg2=new THREE.Mesh(new THREE.CapsuleGeometry(0.03,0.2,4,8),crabMat);
+  seg2.position.y=-0.22; seg2.rotation.z=Math.PI/2; leg.add(seg2);
+  leg.position.set((i%2?0.2:-0.2),0,i<4?0.18:-0.18);
+  crab.add(leg);
+}
+crab.position.set(0,-H/2+0.35,0);
+aquarium.add(crab);
+
+// улитки
+const snails=[];
+for(let i=0;i<3;i++){
+  const s=new THREE.Group();
+  const shellS=new THREE.Mesh(new THREE.ConeGeometry(0.18,0.35,8),new THREE.MeshStandardMaterial({color:0x8b7355}));
+  shellS.rotation.x=Math.PI; s.add(shellS);
+  const bodyS=new THREE.Mesh(new THREE.SphereGeometry(0.12,8,8),new THREE.MeshStandardMaterial({color:0x7a5c3e}));
+  bodyS.position.y=-0.1; s.add(bodyS);
+  s.position.set((Math.random()-0.5)*5,-H/2+0.15,(Math.random()-0.5)*4);
+  s.userData={dir:new THREE.Vector2(Math.random()-0.5,Math.random()-0.5).normalize(),speed:0.2+Math.random()*0.2};
+  aquarium.add(s); snails.push(s);
+}
+
+// камера орбита
+let radius=10,theta=0.6,phi=1.0;
+function updateCamera(){
+  const sinp=Math.sin(phi), cosp=Math.cos(phi);
+  camera.position.set(radius*Math.sin(phi)*Math.sin(theta), radius*cosp, radius*Math.sin(phi)*Math.cos(theta));
+  camera.lookAt(0,0,0);
+}
+updateCamera();
+
+let dragging=false,lastX=0,lastY=0;
+renderer.domElement.addEventListener('mousedown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY});
+addEventListener('mouseup',()=>dragging=false);
+addEventListener('mousemove',e=>{if(!dragging)return; const dx=e.clientX-lastX, dy=e.clientY-lastY; theta-=dx*0.005; phi=Math.max(0.2,Math.min(Math.PI-0.2,phi-dy*0.005)); lastX=e.clientX;lastY=e.clientY; updateCamera();});
+renderer.domElement.addEventListener('wheel',e=>{e.preventDefault(); radius=Math.max(4,Math.min(18,radius+e.deltaY*0.01)); updateCamera();},{passive:false});
+
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+
+let paused=false, lightOn=true, t=0;
+document.getElementById('pauseBtn').onclick=e=>{paused=!paused;e.target.textContent=paused?'Продолжить':'Пауза';};
+document.getElementById('lightToggle').onchange=e=>{lightOn=e.target.checked; sun.intensity=lightOn?1.2:0.1; back.intensity=lightOn?0.8:0.05;};
+
+let bubbleIndex=0;
+function spawnBubble(){
+  const b=bubbles[bubbleIndex% bubbles.length]; bubbleIndex++;
+  b.position.copy(pump.position); b.position.y+=1.0; b.position.x+=(Math.random()-0.5)*0.1; b.position.z+=(Math.random()-0.5)*0.1;
+  b.visible=true; b.scale.setScalar(0.5+Math.random()*0.7);
+}
+
+function animate(){
+  requestAnimationFrame(animate);
+  if(!paused){
+    t+=0.016;
+    causticMat.uniforms.time.value=t*0.3;
+    // вода рябь
+    water.material.opacity=0.35+Math.sin(t*1.5)*0.03;
+    // растения
+    plants.forEach(p=>{p.rotation.z=Math.sin(t*p.userData.freq+p.userData.phase)*p.userData.amp;});
+    // пузырьки
+    if(Math.floor(t*2)%1===0) spawnBubble();
+    bubbles.forEach(b=>{if(!b.visible)return; b.position.y+=b.userData.vy; b.position.x+=Math.sin(t+b.position.y)*0.002; if(b.position.y>water.position.y){b.visible=false;}});
+    // рыбы
+    fishes.forEach(f=>{
+      const u=f.userData;
+      const x=u.base.x+Math.sin(t*u.fx+u.px)*u.ampX+Math.sin(t*u.fx2+u.px)*u.ampX2;
+      const y=u.base.y+Math.sin(t*u.fy+u.py)*u.ampY;
+      const z=u.base.z+Math.sin(t*u.fz+u.pz)*u.ampZ;
+      f.position.set(x,y,z);
+      const nx=x+Math.sin((t+0.1)*u.fx+u.px)*u.ampX, ny=y+Math.sin((t+0.1)*u.fy+u.py)*u.ampY, nz=z+Math.sin((t+0.1)*u.fz+u.pz)*u.ampZ;
+      f.lookAt(nx,ny,nz);
+      f.children[1].rotation.y=Math.sin(t*u.speed*6)*0.6;
+    });
+    // краб
+    crab.position.x=Math.sin(t*0.3)*2.2;
+    crab.position.z=Math.cos(t*0.22)*1.8;
+    crab.rotation.y=Math.sin(t*0.5)*0.4;
+    // улитки
+    snails.forEach(s=>{
+      s.position.x+=s.userData.dir.x*s.userData.speed*0.01;
+      s.position.z+=s.userData.dir.y*s.userData.speed*0.01;
+      if(Math.abs(s.position.x)>W/2-0.5||Math.abs(s.position.z)>D/2-0.5){s.userData.dir.set(Math.random()-0.5,Math.random()-0.5).normalize();}
+      s.rotation.y=Math.atan2(s.userData.dir.y,s.userData.dir.x);
+    });
+  }
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
